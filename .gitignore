@@ -1,0 +1,24 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.kotlin/
+
+# Firma de la app: NUNCA subirla al repositorio (ver README.md)
+firma/
+*.jks
+*.keystore
+
+# APK compiladas (se publican como releases de GitHub)
+*.apk
+
+# Datos que genera el PedIA simulado
+herramientas/pedia-simulada/tickets/
+herramientas/pedia-simulada/actualizaciones/
+
+# Capturas de pantalla de pruebas
+captura-*.png

@@ -1,0 +1,62 @@
+# Publica una versión nueva de PedIA Móvil al subir una etiqueta "vX.Y.Z".
+# Compila el APK firmado y crea la release de GitHub con:
+#   - pedia-movil.apk  (lo que descargan las tablets)
+#   - version.json     (lo que miran las tablets al abrir la app para saber si hay versión nueva)
+name: Publicar versión
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Comprobar que la etiqueta coincide con la versión
+        run: |
+          VERSION=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2 | tr -d '\r')
+          CODIGO=$(grep '^VERSION_CODE=' gradle.properties | cut -d= -f2 | tr -d '\r')
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "La etiqueta $GITHUB_REF_NAME no coincide con VERSION_NAME=$VERSION de gradle.properties"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CODIGO=$CODIGO" >> "$GITHUB_ENV"
+
+      - name: Preparar la firma
+        run: echo "${{ secrets.FIRMA_ALMACEN_BASE64 }}" | base64 -d > "$RUNNER_TEMP/firma.jks"
+
+      - name: Compilar APK
+        env:
+          FIRMA_ARCHIVO: ${{ runner.temp }}/firma.jks
+          FIRMA_CLAVE_ALMACEN: ${{ secrets.FIRMA_CLAVE }}
+          FIRMA_ALIAS: pedia-movil
+          FIRMA_CLAVE: ${{ secrets.FIRMA_CLAVE }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk pedia-movil.apk
+
+      - name: Crear version.json
+        run: |
+          jq -n --argjson c "$CODIGO" --arg v "$VERSION" --rawfile n novedades.txt \
+            '{versionCode: $c, versionName: $v, notas: ($n | rtrimstr("\n"))}' > version.json
+          cat version.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: PedIA Móvil ${{ env.VERSION }}
+          body_path: novedades.txt
+          files: |
+            pedia-movil.apk
+            version.json

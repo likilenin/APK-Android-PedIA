@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono inspirado en el logo de PedIA: una "P" azul con forma de ticket y un destello. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cuerpo de la P -->
+    <path
+        android:fillColor="#2F6FED"
+        android:pathData="M34,30 L60,30 A18,18 0 0 1 60,66 L46,66 L46,78 L40,74 L34,78 Z" />
+    <!-- Ticket blanco dentro -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,38 L60,38 L60,58 L56,55 L52,58 L48,55 L44,58 Z" />
+    <path
+        android:fillColor="#2F6FED"
+        android:pathData="M47,42 L57,42 L57,44.5 L47,44.5 Z M47,47 L57,47 L57,49.5 L47,49.5 Z" />
+    <!-- Destello -->
+    <path
+        android:fillColor="#7FA8FF"
+        android:pathData="M78,24 L80,30 L86,32 L80,34 L78,40 L76,34 L70,32 L76,30 Z" />
+</vector>
