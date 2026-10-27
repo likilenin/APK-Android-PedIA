@@ -22,3 +22,6 @@ herramientas/pedia-simulada/actualizaciones/
 
 # Capturas de pantalla de pruebas
 captura-*.png
+
+# Lanzador compilado (se genera con herramientas/lanzador/compilar.bat)
+*.exe

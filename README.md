@@ -92,9 +92,11 @@ El APK queda en `app/build/outputs/apk/release/app-release.apk`.
 
 ## Probar en este PC (tablet de pruebas)
 
-Doble clic en **`Abrir tablet de pruebas.bat`**: arranca un PedIA simulado
+Doble clic en **`Abrir tablet de pruebas.exe`**: arranca un PedIA simulado
 (`herramientas/pedia-simulada`, puerto 4100, con carta, 12 mesas e impresora de tickets falsa en el
-9100), abre el emulador Android (tablet 1280×800) e instala y abre la última versión compilada.
+9100), abre el emulador Android (tablet 1280×800) e instala y abre la APK más reciente de la carpeta
+(`PedIA-Movil-*.apk`), enseñando el progreso en una ventanita. El `.exe` no se sube a git: se genera
+con `herramientas/lanzador/compilar.bat` (usa el compilador de C# que trae Windows).
 En la app, la conexión es IP `10.0.2.2` (el PC visto desde el emulador) y puerto `4100`.
 Atajos del emulador: Ctrl+Retroceso = atrás, Ctrl+H = inicio.
 
