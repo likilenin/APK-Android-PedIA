@@ -36,12 +36,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
@@ -59,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -415,6 +418,10 @@ fun FichaProductoKiosco(
     @DrawableRes icono: Int,
     /** La línea del pedido que se está editando; sin ella, la ficha añade una nueva. */
     linea: LineaCarrito? = null,
+    /** Camarero: añade un campo para escribir lo que pida el cliente, aunque no esté en la carta. */
+    conNotaLibre: Boolean = false,
+    /** Camarero, al editar varias unidades: guarda los cambios solo en una de ellas. */
+    alGuardarSoloUna: ((LineaCarrito) -> Unit)? = null,
     alAnadir: (LineaCarrito) -> Unit,
     alCerrar: () -> Unit,
 ) {
@@ -429,10 +436,25 @@ fun FichaProductoKiosco(
     // Lo quitado a cada opción elegida ("Sin queso"...) y qué desplegables están abiertos.
     var quitados by remember { mutableStateOf(linea?.quitados.orEmpty()) }
     var abiertos by remember { mutableStateOf(linea?.selecciones.orEmpty().toSet()) }
+    var notaLibre by remember { mutableStateOf(linea?.notaLibre.orEmpty()) }
     val seleccionadas = menu.values.flatten()
     val faltan = producto.grupos.filter { it.obligatorio && menu[it.id].isNullOrEmpty() }
     val precioUnidad = producto.precio + producto.grupos.flatMap { it.opciones }.filter { it.id in seleccionadas }.sumOf { it.suplemento }
     val movil = esMovil()
+
+    fun lineaElegida(unidades: Int): LineaCarrito {
+        val notas = producto.opciones.filter { it in elegidas } + notasDeIngredientes(producto, seleccionadas, quitados) +
+            listOfNotNull(notaLibre.trim().ifBlank { null })
+        return LineaCarrito(
+            producto,
+            unidades,
+            notas.joinToString(", "),
+            seleccionadas,
+            elegidas,
+            quitados.filterKeys { it in seleccionadas }.filterValues { it.isNotEmpty() },
+            notaLibre.trim(),
+        )
+    }
 
     VentanaPedia(alCerrar) {
         Surface(
@@ -528,6 +550,17 @@ fun FichaProductoKiosco(
                                 }
                             }
                         }
+                        if (conNotaLibre) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = notaLibre,
+                                onValueChange = { notaLibre = it.take(200) },
+                                label = { Text("Qué pide el cliente") },
+                                placeholder = { Text("Sin pan, poco hecha…") },
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Cantidad", fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = Tinta, modifier = Modifier.weight(1f))
@@ -536,50 +569,49 @@ fun FichaProductoKiosco(
                     }
                 }
                 Surface(color = Color.White, shadowElevation = 12.dp) {
-                    Row(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp), horizontalArrangement = Arrangement.spacedBy(if (movil) 10.dp else 14.dp)) {
-                        OutlinedButton(
-                            onClick = alCerrar,
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                            modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 72.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                        ) { Text("Cancelar", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
-                        Button(
-                            onClick = {
-                                val notas = producto.opciones.filter { it in elegidas } + notasDeIngredientes(producto, seleccionadas, quitados)
-                                alAnadir(
-                                    LineaCarrito(
-                                        producto,
-                                        cantidad,
-                                        notas.joinToString(", "),
-                                        seleccionadas,
-                                        elegidas,
-                                        quitados.filterKeys { it in seleccionadas }.filterValues { it.isNotEmpty() },
-                                    ),
+                    Column {
+                        if (alGuardarSoloUna != null && linea != null && linea.cantidad > 1) {
+                            OutlinedButton(
+                                onClick = { alGuardarSoloUna(lineaElegida(1)) },
+                                enabled = faltan.isEmpty(),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(2.dp, Ambar),
+                                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp).heightIn(min = 52.dp),
+                            ) { Text("Guardar solo en 1 de las ${linea.cantidad}", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Tinta) }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp), horizontalArrangement = Arrangement.spacedBy(if (movil) 10.dp else 14.dp)) {
+                            OutlinedButton(
+                                onClick = alCerrar,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
+                                modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 72.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                            ) { Text("Cancelar", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
+                            Button(
+                                onClick = { alAnadir(lineaElegida(cantidad)) },
+                                enabled = faltan.isEmpty(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Ambar,
+                                    contentColor = Tinta,
+                                    disabledContainerColor = Color(0xFFEDEDED),
+                                    disabledContentColor = Color(0xFF71717A),
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(if (movil) 2.4f else 2f).heightIn(min = if (movil) 60.dp else 72.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            ) {
+                                Text(
+                                    when {
+                                        faltan.isNotEmpty() -> "Elige: ${faltan.first().nombre}"
+                                        linea != null -> "Guardar cambios · ${euros(precioUnidad * cantidad)}"
+                                        else -> "Añadir al pedido · ${euros(precioUnidad * cantidad)}"
+                                    },
+                                    fontSize = if (movil) 17.sp else 20.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
-                            },
-                            enabled = faltan.isEmpty(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Ambar,
-                                contentColor = Tinta,
-                                disabledContainerColor = Color(0xFFEDEDED),
-                                disabledContentColor = Color(0xFF71717A),
-                            ),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(if (movil) 2.4f else 2f).heightIn(min = if (movil) 60.dp else 72.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) {
-                            Text(
-                                when {
-                                    faltan.isNotEmpty() -> "Elige: ${faltan.first().nombre}"
-                                    linea != null -> "Guardar cambios · ${euros(precioUnidad * cantidad)}"
-                                    else -> "Añadir al pedido · ${euros(precioUnidad * cantidad)}"
-                                },
-                                fontSize = if (movil) 17.sp else 20.sp,
-                                fontWeight = FontWeight.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            }
                         }
                     }
                 }

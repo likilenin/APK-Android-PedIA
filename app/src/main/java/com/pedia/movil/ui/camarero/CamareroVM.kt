@@ -93,18 +93,26 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     fun anadir(producto: Producto, cantidad: Int = 1, notas: String = "", selecciones: List<Long> = emptyList()) =
         nuevas.anadir(LineaCarrito(producto, cantidad, notas, selecciones))
 
+    /** Añade la línea tal como sale de la ficha, con lo marcado, para poder volver a abrirla y editarla. */
+    fun anadir(linea: LineaCarrito) = nuevas.anadir(linea)
+
     fun cambiarCantidad(clave: String, delta: Int) = nuevas.cambiarCantidad(clave, delta)
 
-    /** Cambia lo que pide el cliente en una línea por enviar; con [soloUna], se separa una unidad con ese texto. */
-    fun editarNota(clave: String, notas: String, soloUna: Boolean) {
+    /** Cambia una línea por enviar por su versión editada; con [soloUna], se separa una unidad con los cambios. */
+    fun editarLinea(clave: String, nueva: LineaCarrito, soloUna: Boolean) {
         val linea = nuevas.firstOrNull { it.clave == clave } ?: return
-        val nueva = linea.copy(notas = notas.trim())
         if (soloUna && linea.cantidad > 1) {
             nuevas.cambiarCantidad(clave, -1)
             nuevas.anadir(nueva.copy(cantidad = 1))
         } else {
             nuevas.sustituir(clave, nueva)
         }
+    }
+
+    /** Cambia lo que pide el cliente en una línea por enviar; con [soloUna], se separa una unidad con ese texto. */
+    fun editarNota(clave: String, notas: String, soloUna: Boolean) {
+        val linea = nuevas.firstOrNull { it.clave == clave } ?: return
+        editarLinea(clave, linea.copy(notas = notas.trim()), soloUna)
     }
 
     private fun actualizarPedido(pedido: Pedido) {
@@ -178,15 +186,16 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     fun cobrarEnEfectivo(pedido: Pedido) =
         accion("✓ Mesa ${pedido.mesaNumero} cobrada en efectivo") { api.marcarPagado(pedido.id) }
 
+    fun cerrarComanda(pedido: Pedido) =
+        accion("✓ Comanda de la mesa ${pedido.mesaNumero} cerrada: PedIA imprime el ticket", cerrar = true) {
+            api.cerrarComanda(pedido.id)
+            null
+        }
+
     fun liberarMesa(pedido: Pedido) =
         accion("✓ Mesa ${pedido.mesaNumero} libre", cerrar = true) { api.liberarMesa(pedido.id) }
 
     fun cambiarDeMesa(pedido: Pedido, nueva: Int) = accion("✓ Pedido pasado a la mesa $nueva", cerrar = true) {
         api.cambiarMesa(pedido.id, nueva)
-    }
-
-    fun imprimirCuenta(pedido: Pedido) = accion("✓ Ticket enviado a la impresora de PedIA") {
-        api.reimprimir(pedido.id)
-        null
     }
 }

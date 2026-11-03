@@ -326,7 +326,6 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
                     if (pedido != null) Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Opciones de la mesa") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Imprimir cuenta (en PedIA)") }, onClick = { menu = false; vm.imprimirCuenta(pedido) })
                             if (!pedido.pagado) {
                                 DropdownMenuItem(text = { Text("Cobrar en efectivo") }, onClick = { menu = false; confirmar = "cobrar" })
                             }
@@ -338,7 +337,18 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
         },
     ) { relleno ->
         Column(Modifier.padding(relleno).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            if (pedido != null) BarraMesa(pedido, !vm.ocupado) { confirmar = "liberar" }
+            if (pedido != null) {
+                BarraMesa(
+                    pedido,
+                    habilitada = !vm.ocupado,
+                    alCerrarComanda = {
+                        // Lo que aún no se ha enviado no saldría en el ticket final.
+                        if (vm.nuevas.isEmpty()) confirmar = "cerrar"
+                        else vm.aviso = "Primero envía a cocina lo apuntado o quítalo de la comanda"
+                    },
+                    alLiberar = { confirmar = "liberar" },
+                )
+            }
             var pestana by remember { mutableIntStateOf(0) }
             TabRow(selectedTabIndex = pestana) {
                 Tab(pestana == 0, { pestana = 0 }, text = { Text("Carta", fontSize = 16.sp) })
@@ -349,7 +359,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
             }
             Box(Modifier.weight(1f)) {
                 if (pestana == 0) CartaRapida(vm, ajustes, Modifier.fillMaxSize())
-                else PanelComanda(vm, pedido)
+                else PanelComanda(vm, ajustes, pedido)
             }
             BarraEnviar(vm)
         }
@@ -373,6 +383,13 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
             alConfirmar = { confirmar = null; vm.cobrarEnEfectivo(pedido) },
             alCancelar = { confirmar = null },
         )
+        "cerrar" -> DialogoConfirmar(
+            titulo = "Cerrar comanda de la mesa $mesa",
+            texto = "PedIA imprimirá el ticket final para el cliente (${euros(pedido.total)}).",
+            textoSi = "Cerrar comanda",
+            alConfirmar = { confirmar = null; vm.cerrarComanda(pedido) },
+            alCancelar = { confirmar = null },
+        )
         "liberar" -> DialogoConfirmar(
             titulo = "Liberar mesa $mesa",
             texto = "La mesa quedará libre. " +
@@ -393,17 +410,25 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
     }
 }
 
-/** Total de la mesa ocupada y su botón de liberar, a la vista nada más abrirla. */
+/** Total de la mesa ocupada y sus botones de cerrar comanda y liberar, a la vista nada más abrirla. */
 @Composable
-private fun BarraMesa(pedido: Pedido, habilitada: Boolean, alLiberar: () -> Unit) {
+private fun BarraMesa(pedido: Pedido, habilitada: Boolean, alCerrarComanda: () -> Unit, alLiberar: () -> Unit) {
     Surface(shadowElevation = 2.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Total ${euros(pedido.total)}", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(euros(pedido.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
             OutlinedButton(
                 onClick = alLiberar,
                 enabled = habilitada,
                 modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text("Liberar mesa", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) { Text("Liberar mesa", fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = alCerrarComanda,
+                enabled = habilitada,
+                modifier = Modifier.heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) { Text("Cerrar comanda", fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
         }
     }
 }
@@ -520,7 +545,8 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
                 carta = carta,
                 urlFoto = api.urlFoto(producto.fotoPath),
                 icono = iconoCategoria(carta.categorias.firstOrNull { it.id == producto.categoriaId }?.nombre.orEmpty()),
-                alAnadir = { linea -> vm.anadir(producto, linea.cantidad, linea.notas, linea.selecciones); detalle = null },
+                conNotaLibre = true,
+                alAnadir = { linea -> vm.anadir(linea); detalle = null },
                 alCerrar = { detalle = null },
             )
         } else {
@@ -537,7 +563,7 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
 }
 
 @Composable
-private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
+private fun PanelComanda(vm: CamareroVM, ajustes: Ajustes, pedido: Pedido?) {
     var itemElegido by remember { mutableStateOf<ItemPedido?>(null) }
     var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
     var itemEditado by remember { mutableStateOf<ItemPedido?>(null) }
@@ -581,15 +607,31 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
     }
 
     lineaEditada?.let { linea ->
-        DialogoNota(
-            nombre = linea.producto.nombre,
-            notasIniciales = linea.notas,
-            opciones = linea.producto.opciones,
-            unidades = linea.cantidad,
-            aviso = null,
-            alGuardar = { notas, soloUna -> vm.editarNota(linea.clave, notas, soloUna); lineaEditada = null },
-            alCancelar = { lineaEditada = null },
-        )
+        val carta = vm.carta
+        if (linea.producto.esMenu && carta != null) {
+            // Un menú se edita en su ficha: se puede cambiar lo elegido (la bebida, las patatas...), no solo el texto.
+            FichaProductoKiosco(
+                producto = linea.producto,
+                carta = carta,
+                urlFoto = ajustes.api().urlFoto(linea.producto.fotoPath),
+                icono = iconoCategoria(carta.categorias.firstOrNull { it.id == linea.producto.categoriaId }?.nombre.orEmpty()),
+                linea = linea,
+                conNotaLibre = true,
+                alGuardarSoloUna = { vm.editarLinea(linea.clave, it, soloUna = true); lineaEditada = null },
+                alAnadir = { vm.editarLinea(linea.clave, it, soloUna = false); lineaEditada = null },
+                alCerrar = { lineaEditada = null },
+            )
+        } else {
+            DialogoNota(
+                nombre = linea.producto.nombre,
+                notasIniciales = linea.notas,
+                opciones = linea.producto.opciones,
+                unidades = linea.cantidad,
+                aviso = null,
+                alGuardar = { notas, soloUna -> vm.editarNota(linea.clave, notas, soloUna); lineaEditada = null },
+                alCancelar = { lineaEditada = null },
+            )
+        }
     }
     val editado = itemEditado
     if (editado != null && pedido != null) {

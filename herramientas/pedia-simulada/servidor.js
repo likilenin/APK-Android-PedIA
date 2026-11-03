@@ -203,6 +203,7 @@ const servidor = http.createServer((req, res) => {
         if (resto === '/marcar-pagado') { p.estado_pago = 'pagado'; return responder(res, 200, p); }
         if (resto === '/liberar-mesa') { p.mesa_numero = null; return responder(res, 200, p); }
         if (resto === '/mesa') { p.mesa_numero = String(body.mesa_numero); return responder(res, 200, p); }
+        if (resto === '/cerrar-comanda') { log('>>> COMANDA CERRADA: TICKET FINAL', p.id); return responder(res, 200, completar(p)); }
         if (resto === '/reimprimir') { log('>>> REIMPRIMIR', p.id); return responder(res, 200, { ok: true }); }
       }
       responder(res, 404, { error: 'ruta no simulada' });

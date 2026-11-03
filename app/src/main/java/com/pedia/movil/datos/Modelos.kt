@@ -130,6 +130,8 @@ data class LineaCarrito(
     val opcionesMarcadas: Set<String> = emptySet(),
     /** ...e ingredientes quitados a cada opción de menú (id de la opción → "Sin queso"...). */
     val quitados: Map<Long, Set<String>> = emptyMap(),
+    /** ...y lo que el camarero ha escrito con sus palabras ("sin pan"). Todo ello ya va dentro de [notas]. */
+    val notaLibre: String = "",
 ) {
     /** Se puede abrir su ficha para cambiar lo elegido o quitar ingredientes. */
     val editable get() = producto.esMenu || producto.opciones.isNotEmpty()

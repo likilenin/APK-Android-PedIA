@@ -229,10 +229,16 @@ class PediaApi(private val urlBase: String) {
     suspend fun liberarMesa(pedidoId: Long): Pedido =
         json.decodeFromString(peticion("POST", "/api/pedidos/$pedidoId/liberar-mesa"))
 
-    /** Imprime de nuevo el ticket del pedido en la impresora de PedIA. */
-    suspend fun reimprimir(pedidoId: Long) {
-        peticion("POST", "/api/pedidos/$pedidoId/reimprimir")
+    /** El camarero cierra la comanda: PedIA imprime el ticket final para el cliente. */
+    suspend fun cerrarComanda(pedidoId: Long) {
+        try {
+            peticion("POST", "/api/pedidos/$pedidoId/cerrar-comanda")
+        } catch (e: ErrorPedia) {
+            if (e.codigoHttp == 404) throw ErrorPedia("PedIA no ha reconocido «Cerrar comanda»: hay que actualizar PedIA en el ordenador.", 404)
+            throw e
+        }
     }
+
 
     fun urlFoto(ruta: String?): String? = when {
         ruta.isNullOrBlank() -> null
