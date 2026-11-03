@@ -55,6 +55,7 @@ import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.ui.AzulPedia
 import com.pedia.movil.ui.DialogoPin
 import com.pedia.movil.ui.FondoOscuro
+import com.pedia.movil.ui.esMovil
 import com.pedia.movil.ui.euros
 import kotlinx.coroutines.delay
 
@@ -185,12 +186,13 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val carta = vm.carta
+            val movil = esMovil()
             when {
                 carta != null -> {
                     Text(
                         "Pide aquí y recoge en el mostrador",
                         color = Color.White,
-                        fontSize = 34.sp,
+                        fontSize = if (movil) 28.sp else 34.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                     )
@@ -201,7 +203,7 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterVertically),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(180.dp)
+                        val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(if (movil) 130.dp else 180.dp)
                         BotonInicio(R.drawable.ic_comer_aqui, "Para tomar aquí", tamano) { vm.empezar(llevar = false) }
                         BotonInicio(R.drawable.ic_para_llevar, "Para llevar", tamano) { vm.empezar(llevar = true) }
                     }
@@ -245,6 +247,7 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
 
 @Composable
 private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifier, alPulsar: () -> Unit) {
+    val movil = esMovil()
     Surface(
         onClick = alPulsar,
         color = Color.White,
@@ -257,9 +260,9 @@ private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifi
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(painterResource(icono), contentDescription = null, tint = FondoOscuro, modifier = Modifier.size(124.dp))
+            Icon(painterResource(icono), contentDescription = null, tint = FondoOscuro, modifier = Modifier.size(if (movil) 84.dp else 124.dp))
             Spacer(Modifier.width(18.dp))
-            Text(texto, fontSize = 46.sp, lineHeight = 50.sp, fontWeight = FontWeight.Black, color = FondoOscuro, maxLines = 1)
+            Text(texto, fontSize = if (movil) 30.sp else 46.sp, fontWeight = FontWeight.Black, color = FondoOscuro, maxLines = 1)
         }
     }
 }

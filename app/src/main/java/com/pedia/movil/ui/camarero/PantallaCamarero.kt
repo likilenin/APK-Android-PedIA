@@ -6,12 +6,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,9 +25,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -74,6 +76,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +94,6 @@ import com.pedia.movil.ui.AvisoError
 import com.pedia.movil.ui.AzulPedia
 import com.pedia.movil.ui.AzulSuave
 import com.pedia.movil.ui.DialogoConfirmar
-import com.pedia.movil.ui.DialogoPin
 import com.pedia.movil.ui.DialogoProducto
 import com.pedia.movil.ui.Etiqueta
 import com.pedia.movil.ui.FondoOscuro
@@ -154,7 +156,6 @@ private fun PantallaMesas(
     alCambiarModo: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    var pedirPinPara by remember { mutableStateOf<(() -> Unit)?>(null) }
     val carta = vm.carta
     val mesas = carta?.mesas ?: 20
 
@@ -180,8 +181,8 @@ private fun PantallaMesas(
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Recargar carta") }, onClick = { menu = false; vm.cargarCarta() })
-                            DropdownMenuItem(text = { Text("Ajustes") }, onClick = { menu = false; pedirPinPara = alAbrirAjustes })
-                            DropdownMenuItem(text = { Text("Cambiar de modo") }, onClick = { menu = false; pedirPinPara = alCambiarModo })
+                            DropdownMenuItem(text = { Text("Ajustes") }, onClick = { menu = false; alAbrirAjustes() })
+                            DropdownMenuItem(text = { Text("Cambiar de modo") }, onClick = { menu = false; alCambiarModo() })
                         }
                     }
                 },
@@ -203,10 +204,6 @@ private fun PantallaMesas(
                 }
             }
         }
-    }
-
-    pedirPinPara?.let { destino ->
-        DialogoPin(ajustes, alAceptar = { pedirPinPara = null; destino() }, alCancelar = { pedirPinPara = null })
     }
 }
 
@@ -334,38 +331,27 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
                                 DropdownMenuItem(text = { Text("Cobrar en efectivo") }, onClick = { menu = false; confirmar = "cobrar" })
                             }
                             DropdownMenuItem(text = { Text("Cambiar de mesa") }, onClick = { menu = false; cambiarMesa = true })
-                            DropdownMenuItem(text = { Text("Liberar mesa") }, onClick = { menu = false; confirmar = "liberar" })
                         }
                     }
                 },
             )
         },
     ) { relleno ->
-        BoxWithConstraints(Modifier.padding(relleno).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            if (maxWidth >= 720.dp) {
-                Row(Modifier.fillMaxSize()) {
-                    CartaRapida(vm, ajustes, Modifier.weight(1.5f))
-                    Surface(shadowElevation = 6.dp, modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        PanelComanda(vm, pedido)
-                    }
-                }
-            } else {
-                var pestana by remember { mutableIntStateOf(0) }
-                Column(Modifier.fillMaxSize()) {
-                    TabRow(selectedTabIndex = pestana) {
-                        Tab(pestana == 0, { pestana = 0 }, text = { Text("Carta", fontSize = 16.sp) })
-                        Tab(pestana == 1, { pestana = 1 }, text = {
-                            val n = vm.nuevas.sumOf { it.cantidad }
-                            Text(if (n > 0) "Comanda ($n)" else "Comanda", fontSize = 16.sp)
-                        })
-                    }
-                    Box(Modifier.weight(1f)) {
-                        if (pestana == 0) CartaRapida(vm, ajustes, Modifier.fillMaxSize())
-                        else PanelComanda(vm, pedido, mostrarBoton = false)
-                    }
-                    BarraEnviar(vm)
-                }
+        Column(Modifier.padding(relleno).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            if (pedido != null) BarraMesa(pedido, !vm.ocupado) { confirmar = "liberar" }
+            var pestana by remember { mutableIntStateOf(0) }
+            TabRow(selectedTabIndex = pestana) {
+                Tab(pestana == 0, { pestana = 0 }, text = { Text("Carta", fontSize = 16.sp) })
+                Tab(pestana == 1, { pestana = 1 }, text = {
+                    val n = vm.nuevas.sumOf { it.cantidad }
+                    Text(if (n > 0) "Comanda ($n)" else "Comanda", fontSize = 16.sp)
+                })
             }
+            Box(Modifier.weight(1f)) {
+                if (pestana == 0) CartaRapida(vm, ajustes, Modifier.fillMaxSize())
+                else PanelComanda(vm, pedido)
+            }
+            BarraEnviar(vm)
         }
     }
 
@@ -389,7 +375,9 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
         )
         "liberar" -> DialogoConfirmar(
             titulo = "Liberar mesa $mesa",
-            texto = "La mesa quedará libre. El pedido no se borra: sigue en PedIA.",
+            texto = "La mesa quedará libre. " +
+                (if (pedido.pagado) "" else "Aún no está cobrada (${euros(pedido.total)}). ") +
+                "El pedido no se borra: sigue en PedIA.",
             textoSi = "Liberar",
             alConfirmar = { confirmar = null; vm.liberarMesa(pedido) },
             alCancelar = { confirmar = null },
@@ -402,6 +390,21 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
             alElegir = { nueva -> cambiarMesa = false; vm.cambiarDeMesa(pedido, nueva) },
             alCancelar = { cambiarMesa = false },
         )
+    }
+}
+
+/** Total de la mesa ocupada y su botón de liberar, a la vista nada más abrirla. */
+@Composable
+private fun BarraMesa(pedido: Pedido, habilitada: Boolean, alLiberar: () -> Unit) {
+    Surface(shadowElevation = 2.dp) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Total ${euros(pedido.total)}", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            OutlinedButton(
+                onClick = alLiberar,
+                enabled = habilitada,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text("Liberar mesa", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        }
     }
 }
 
@@ -534,8 +537,10 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
 }
 
 @Composable
-private fun PanelComanda(vm: CamareroVM, pedido: Pedido?, mostrarBoton: Boolean = true) {
+private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
     var itemElegido by remember { mutableStateOf<ItemPedido?>(null) }
+    var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
+    var itemEditado by remember { mutableStateOf<ItemPedido?>(null) }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
@@ -544,7 +549,9 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?, mostrarBoton: Boolean 
             if (vm.nuevas.isEmpty()) item {
                 Text("Toca productos de la carta para apuntarlos.", color = Color.Gray)
             }
-            items(vm.nuevas, key = { "n" + it.clave }) { linea -> FilaNueva(linea) { vm.cambiarCantidad(linea.clave, it) } }
+            items(vm.nuevas, key = { "n" + it.clave }) { linea ->
+                FilaNueva(linea, alEditar = { lineaEditada = linea }, alCambiar = { vm.cambiarCantidad(linea.clave, it) })
+            }
             if (pedido != null && pedido.items.isNotEmpty()) {
                 item {
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -571,7 +578,30 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?, mostrarBoton: Boolean 
                 }
             }
         }
-        if (mostrarBoton) BarraEnviar(vm)
+    }
+
+    lineaEditada?.let { linea ->
+        DialogoNota(
+            nombre = linea.producto.nombre,
+            notasIniciales = linea.notas,
+            opciones = linea.producto.opciones,
+            unidades = linea.cantidad,
+            aviso = null,
+            alGuardar = { notas, soloUna -> vm.editarNota(linea.clave, notas, soloUna); lineaEditada = null },
+            alCancelar = { lineaEditada = null },
+        )
+    }
+    val editado = itemEditado
+    if (editado != null && pedido != null) {
+        DialogoNota(
+            nombre = editado.productoNombre ?: "Producto",
+            notasIniciales = editado.notas.orEmpty(),
+            opciones = vm.carta?.productos?.firstOrNull { it.id == editado.productoId }?.opciones.orEmpty(),
+            unidades = 1,
+            aviso = "Este producto ya está en cocina: el cambio se guarda en PedIA, pero no se vuelve a imprimir. Avisa a cocina.",
+            alGuardar = { notas, _ -> vm.editarNotaEnviada(pedido, editado, notas); itemEditado = null },
+            alCancelar = { itemEditado = null },
+        )
     }
 
     val elegido = itemElegido
@@ -582,6 +612,7 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?, mostrarBoton: Boolean 
             text = { Text("Este producto ya está enviado a cocina. ¿Qué quieres hacer?") },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { itemElegido = null; itemEditado = elegido }) { Text("Editar") }
                     if (elegido.cantidad > 1) {
                         TextButton(onClick = { itemElegido = null; vm.quitarUnaEnviada(pedido, elegido) }) { Text("Quitar una unidad") }
                     }
@@ -594,7 +625,7 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?, mostrarBoton: Boolean 
 }
 
 @Composable
-private fun FilaNueva(linea: LineaCarrito, alCambiar: (Int) -> Unit) {
+private fun FilaNueva(linea: LineaCarrito, alEditar: () -> Unit, alCambiar: (Int) -> Unit) {
     Surface(color = NaranjaSuave, shape = RoundedCornerShape(12.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -602,9 +633,79 @@ private fun FilaNueva(linea: LineaCarrito, alCambiar: (Int) -> Unit) {
                 if (linea.detalle.isNotBlank()) Text(linea.detalle, fontSize = 13.sp, color = Color.DarkGray)
                 Text(euros(linea.subtotal), fontSize = 13.sp, color = Color.DarkGray)
             }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = alEditar,
+                modifier = Modifier.heightIn(min = 44.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            ) { Text("Editar", fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.width(8.dp))
             SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = 40.dp)
         }
     }
+}
+
+/**
+ * Lo que pide el cliente en un producto, con sus palabras: «sin pan» aunque en la carta de PedIA no exista.
+ * Las opciones del producto, si tiene, son atajos que añaden o quitan su texto.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DialogoNota(
+    nombre: String,
+    notasIniciales: String,
+    opciones: List<String>,
+    unidades: Int,
+    aviso: String?,
+    alGuardar: (notas: String, soloUna: Boolean) -> Unit,
+    alCancelar: () -> Unit,
+) {
+    var texto by remember { mutableStateOf(notasIniciales) }
+    val partes = texto.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    AlertDialog(
+        onDismissRequest = alCancelar,
+        title = { Text(nombre) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                aviso?.let { Text(it, color = Naranja, fontSize = 14.sp) }
+                OutlinedTextField(
+                    value = texto,
+                    onValueChange = { texto = it.take(200) },
+                    label = { Text("Qué pide el cliente") },
+                    placeholder = { Text("Sin pan, sin cebolla, poco hecha…") },
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (opciones.isNotEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        opciones.forEach { opcion ->
+                            val marcada = partes.any { it.equals(opcion, ignoreCase = true) }
+                            FilterChip(
+                                selected = marcada,
+                                onClick = {
+                                    texto = (if (marcada) partes.filterNot { it.equals(opcion, ignoreCase = true) } else partes + opcion)
+                                        .joinToString(", ")
+                                },
+                                label = { Text(opcion, fontSize = 14.sp) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                if (unidades > 1) {
+                    Button(onClick = { alGuardar(texto, true) }) { Text("Guardar solo en 1 de las $unidades") }
+                    OutlinedButton(onClick = { alGuardar(texto, false) }) { Text("Guardar en las $unidades") }
+                } else {
+                    Button(onClick = { alGuardar(texto, false) }) { Text("Guardar") }
+                }
+                TextButton(onClick = alCancelar) { Text("Cancelar") }
+            }
+        },
+    )
 }
 
 @Composable

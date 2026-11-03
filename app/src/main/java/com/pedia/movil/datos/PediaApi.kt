@@ -209,6 +209,11 @@ class PediaApi(private val urlBase: String) {
             peticion("PATCH", "/api/pedidos/$pedidoId/items/$itemId", buildJsonObject { put("cantidad", cantidad) })
         )
 
+    suspend fun cambiarNotasItem(pedidoId: Long, itemId: Long, notas: String): Pedido =
+        json.decodeFromString(
+            peticion("PATCH", "/api/pedidos/$pedidoId/items/$itemId", buildJsonObject { put("notas", notas) })
+        )
+
     suspend fun eliminarItem(pedidoId: Long, itemId: Long): Pedido =
         json.decodeFromString(peticion("DELETE", "/api/pedidos/$pedidoId/items/$itemId"))
 

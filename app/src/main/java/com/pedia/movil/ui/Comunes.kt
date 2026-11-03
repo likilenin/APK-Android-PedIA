@@ -53,8 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.SubcomposeAsyncImage
 import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.datos.PIN_INICIAL
@@ -198,7 +196,7 @@ fun DialogoProducto(
     var elegidas by remember { mutableStateOf(setOf<String>()) }
     var nota by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    VentanaPedia(alCerrar) {
         Card(
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier
@@ -222,7 +220,7 @@ fun DialogoProducto(
                                 FilterChip(
                                     selected = opcion in elegidas,
                                     onClick = { elegidas = if (opcion in elegidas) elegidas - opcion else elegidas + opcion },
-                                    label = { Text(opcion, fontSize = 16.sp, modifier = Modifier.padding(vertical = 8.dp)) },
+                                    label = { Text(opcion, fontSize = 14.sp, modifier = Modifier.padding(vertical = 2.dp)) },
                                 )
                             }
                         }

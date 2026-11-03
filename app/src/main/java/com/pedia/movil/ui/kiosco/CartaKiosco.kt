@@ -64,8 +64,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.SubcomposeAsyncImage
 import com.pedia.movil.R
 import com.pedia.movil.datos.Ajustes
@@ -83,7 +81,9 @@ import com.pedia.movil.ui.GrisTexto
 import com.pedia.movil.ui.Rojo
 import com.pedia.movil.ui.SelectorCantidad
 import com.pedia.movil.ui.Tinta
+import com.pedia.movil.ui.VentanaPedia
 import com.pedia.movil.ui.Verde
+import com.pedia.movil.ui.esMovil
 import com.pedia.movil.ui.euros
 import kotlinx.coroutines.delay
 
@@ -101,6 +101,7 @@ fun CartaKiosco(vm: KioscoVM, ajustes: Ajustes) {
     var productoAbierto by remember { mutableStateOf<Producto?>(null) }
     var confirmarCancelar by remember { mutableStateOf(false) }
     val categoria = carta.categorias.firstOrNull { it.id == vm.categoria } ?: carta.categorias.firstOrNull()
+    val movil = esMovil()
 
     Box(Modifier.fillMaxSize().background(Crema)) {
         Column(Modifier.fillMaxSize()) {
@@ -108,7 +109,7 @@ fun CartaKiosco(vm: KioscoVM, ajustes: Ajustes) {
             Row(Modifier.weight(1f)) {
                 // Categorías
                 LazyColumn(
-                    Modifier.width(150.dp).fillMaxHeight().background(Color.White),
+                    Modifier.width(if (movil) 108.dp else 150.dp).fillMaxHeight().background(Color.White),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
                     items(carta.categorias, key = { it.id }) { cat ->
@@ -120,14 +121,14 @@ fun CartaKiosco(vm: KioscoVM, ajustes: Ajustes) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         categoria?.nombre.orEmpty(),
-                        fontSize = 34.sp,
+                        fontSize = if (movil) 26.sp else 34.sp,
                         fontWeight = FontWeight.Black,
                         color = Tinta,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
                     )
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(180.dp),
-                        contentPadding = PaddingValues(16.dp),
+                        columns = GridCells.Adaptive(if (movil) 150.dp else 180.dp),
+                        contentPadding = PaddingValues(if (movil) 10.dp else 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.weight(1f),
@@ -210,16 +211,17 @@ fun EtiquetaLugar(paraLlevar: Boolean) {
 
 @Composable
 private fun ElementoCategoria(nombre: String, @DrawableRes icono: Int, elegida: Boolean, alPulsar: () -> Unit) {
+    val movil = esMovil()
     Surface(onClick = alPulsar, color = if (elegida) AmbarSuave else Color.White) {
-        Row(Modifier.fillMaxWidth().height(ALTO_CATEGORIA)) {
+        Row(Modifier.fillMaxWidth().height(if (movil) 96.dp else ALTO_CATEGORIA)) {
             // Marca de la categoría elegida, como en los autoservicios.
             Box(Modifier.width(6.dp).fillMaxHeight().background(if (elegida) Ambar else Color.Transparent))
             Column(
-                Modifier.weight(1f).padding(vertical = 12.dp, horizontal = 8.dp),
+                Modifier.weight(1f).padding(vertical = if (movil) 8.dp else 12.dp, horizontal = if (movil) 4.dp else 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(52.dp))
-                Spacer(Modifier.height(6.dp))
+                Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(if (movil) 40.dp else 52.dp))
+                Spacer(Modifier.height(if (movil) 4.dp else 6.dp))
                 Text(
                     nombre,
                     fontSize = 15.sp,
@@ -331,25 +333,31 @@ private fun TarjetaProductoKiosco(
 
 @Composable
 private fun BarraPedidoKiosco(unidades: Int, total: Long, alCancelar: () -> Unit, alVerPedido: () -> Unit) {
+    val movil = esMovil()
     Surface(color = Color.White, shadowElevation = 16.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = if (movil) 10.dp else 16.dp, vertical = if (movil) 10.dp else 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedButton(
                 onClick = alCancelar,
                 shape = RoundedCornerShape(14.dp),
                 border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                modifier = Modifier.heightIn(min = 64.dp),
-            ) { Text("Cancelar pedido", color = Rojo, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 16.dp)) {
+                modifier = Modifier.heightIn(min = if (movil) 56.dp else 64.dp),
+                contentPadding = PaddingValues(horizontal = if (movil) 12.dp else 24.dp),
+            ) { Text(if (movil) "Cancelar" else "Cancelar pedido", color = Rojo, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(horizontal = if (movil) 10.dp else 16.dp)) {
                 Text(
-                    if (unidades == 0) "Tu pedido está vacío" else "Mi pedido · $unidades ${if (unidades == 1) "producto" else "productos"}",
+                    when {
+                        unidades == 0 -> "Tu pedido está vacío"
+                        movil -> "$unidades ${if (unidades == 1) "producto" else "productos"}"
+                        else -> "Mi pedido · $unidades ${if (unidades == 1) "producto" else "productos"}"
+                    },
                     color = GrisTexto,
                     fontSize = 15.sp,
+                    maxLines = 1,
                 )
-                Text(euros(total), color = Tinta, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                Text(euros(total), color = Tinta, fontSize = if (movil) 24.sp else 28.sp, fontWeight = FontWeight.Black, maxLines = 1)
             }
             Button(
                 onClick = alVerPedido,
@@ -361,9 +369,9 @@ private fun BarraPedidoKiosco(unidades: Int, total: Long, alCancelar: () -> Unit
                     disabledContentColor = Color(0xFFA1A1AA),
                 ),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.heightIn(min = 64.dp),
-                contentPadding = PaddingValues(horizontal = 26.dp),
-            ) { Text("Ver mi pedido", fontSize = 20.sp, fontWeight = FontWeight.Black) }
+                modifier = Modifier.heightIn(min = if (movil) 56.dp else 64.dp),
+                contentPadding = PaddingValues(horizontal = if (movil) 14.dp else 26.dp),
+            ) { Text("Ver mi pedido", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Black, maxLines = 1) }
         }
     }
 }
@@ -424,8 +432,9 @@ fun FichaProductoKiosco(
     val seleccionadas = menu.values.flatten()
     val faltan = producto.grupos.filter { it.obligatorio && menu[it.id].isNullOrEmpty() }
     val precioUnidad = producto.precio + producto.grupos.flatMap { it.opciones }.filter { it.id in seleccionadas }.sumOf { it.suplemento }
+    val movil = esMovil()
 
-    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    VentanaPedia(alCerrar) {
         Surface(
             color = Color.White,
             shape = RoundedCornerShape(28.dp),
@@ -434,7 +443,7 @@ fun FichaProductoKiosco(
             Column {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     Box {
-                        ImagenProducto(urlFoto, icono, Modifier.fillMaxWidth().height(300.dp), tamanoIcono = 0.55f)
+                        ImagenProducto(urlFoto, icono, Modifier.fillMaxWidth().height(if (movil) 170.dp else 300.dp), tamanoIcono = 0.55f)
                         Surface(
                             onClick = alCerrar,
                             color = Color.White,
@@ -443,12 +452,12 @@ fun FichaProductoKiosco(
                             modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).size(52.dp),
                         ) { Box(contentAlignment = Alignment.Center) { Text("✕", fontSize = 24.sp, color = Tinta) } }
                     }
-                    Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(producto.nombre, fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight.Black, color = Tinta)
+                    Column(Modifier.padding(if (movil) 18.dp else 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(producto.nombre, fontSize = if (movil) 26.sp else 32.sp, lineHeight = if (movil) 30.sp else 36.sp, fontWeight = FontWeight.Black, color = Tinta)
                         producto.descripcion?.takeIf { it.isNotBlank() }?.let {
                             Text(it, fontSize = 18.sp, color = GrisTexto)
                         }
-                        Text(euros(producto.precio), fontSize = 28.sp, fontWeight = FontWeight.Black, color = Tinta)
+                        Text(euros(producto.precio), fontSize = if (movil) 24.sp else 28.sp, fontWeight = FontWeight.Black, color = Tinta)
                         producto.grupos.forEach { grupo ->
                             Spacer(Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
@@ -462,7 +471,7 @@ fun FichaProductoKiosco(
                                     modifier = Modifier.padding(bottom = 3.dp),
                                 )
                             }
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 grupo.opciones.forEach { opcion ->
                                     val actuales = menu[grupo.id].orEmpty()
                                     val marcada = opcion.id in actuales
@@ -510,7 +519,7 @@ fun FichaProductoKiosco(
                         if (producto.opciones.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
                             Text("Personaliza tu producto", fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 producto.opciones.forEach { opcion ->
                                     val marcada = opcion in elegidas
                                     CasillaOpcion(opcion, null, marcada, true) {
@@ -527,13 +536,14 @@ fun FichaProductoKiosco(
                     }
                 }
                 Surface(color = Color.White, shadowElevation = 12.dp) {
-                    Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp), horizontalArrangement = Arrangement.spacedBy(if (movil) 10.dp else 14.dp)) {
                         OutlinedButton(
                             onClick = alCerrar,
                             shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                            modifier = Modifier.weight(1f).heightIn(min = 72.dp),
-                        ) { Text("Cancelar", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Tinta) }
+                            modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 72.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                        ) { Text("Cancelar", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
                         Button(
                             onClick = {
                                 val notas = producto.opciones.filter { it in elegidas } + notasDeIngredientes(producto, seleccionadas, quitados)
@@ -556,7 +566,8 @@ fun FichaProductoKiosco(
                                 disabledContentColor = Color(0xFF71717A),
                             ),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(2f).heightIn(min = 72.dp),
+                            modifier = Modifier.weight(if (movil) 2.4f else 2f).heightIn(min = if (movil) 60.dp else 72.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                         ) {
                             Text(
                                 when {
@@ -564,8 +575,10 @@ fun FichaProductoKiosco(
                                     linea != null -> "Guardar cambios · ${euros(precioUnidad * cantidad)}"
                                     else -> "Añadir al pedido · ${euros(precioUnidad * cantidad)}"
                                 },
-                                fontSize = 20.sp,
+                                fontSize = if (movil) 17.sp else 20.sp,
                                 fontWeight = FontWeight.Black,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -620,8 +633,8 @@ private fun DesplegableIngredientes(
             }
             AnimatedVisibility(visible = abierto) {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                 ) {
                     ingredientes.forEach { ingrediente ->
@@ -640,20 +653,20 @@ private fun CasillaOpcion(texto: String, extra: String?, marcada: Boolean, habil
         onClick = alPulsar,
         enabled = habilitada,
         color = if (marcada) AmbarSuave else if (habilitada) Color.White else Color(0xFFF4F4F5),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(2.dp, if (marcada) Ambar else Color(0xFFE5E7EB)),
     ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(28.dp)
+                Modifier.size(22.dp)
                     .background(if (marcada) Ambar else Color.White, CircleShape)
                     .border(2.dp, if (marcada) Ambar else Color(0xFFD1D5DB), CircleShape),
                 contentAlignment = Alignment.Center,
-            ) { if (marcada) Text("✓", fontWeight = FontWeight.Black, color = Tinta) }
-            Spacer(Modifier.width(12.dp))
+            ) { if (marcada) Text("✓", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Tinta) }
+            Spacer(Modifier.width(9.dp))
             Column {
-                Text(texto, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = if (habilitada) Tinta else GrisTexto)
-                extra?.let { Text(it, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GrisTexto) }
+                Text(texto, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (habilitada) Tinta else GrisTexto)
+                extra?.let { Text(it, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GrisTexto) }
             }
         }
     }
@@ -669,19 +682,20 @@ fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
     var productoAbierto by remember { mutableStateOf<Producto?>(null) }
     var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
     val sugerencias = vm.sugerencias()
+    val movil = esMovil()
 
     Box(Modifier.fillMaxSize().background(Crema)) {
         Column(Modifier.fillMaxSize()) {
             Surface(color = Color.White, shadowElevation = 2.dp) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Mi pedido", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Tinta, modifier = Modifier.weight(1f))
+                    Text("Mi pedido", fontSize = if (movil) 28.sp else 36.sp, fontWeight = FontWeight.Black, color = Tinta, modifier = Modifier.weight(1f))
                     EtiquetaLugar(vm.paraLlevar)
                 }
             }
             // Las líneas del pedido ocupan todo el ancho; lo que se puede añadir, en cuadrícula debajo.
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(170.dp),
-                contentPadding = PaddingValues(20.dp),
+                columns = GridCells.Adaptive(if (movil) 130.dp else 170.dp),
+                contentPadding = PaddingValues(if (movil) 12.dp else 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -712,7 +726,7 @@ fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
                 }
             }
             Surface(color = Color.White, shadowElevation = 16.dp) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp)) {
                     vm.errorEnvio?.let {
                         AvisoError("No se ha podido enviar el pedido. $it")
                         Spacer(Modifier.height(12.dp))
@@ -722,26 +736,28 @@ fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
                             Text("Total", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Tinta)
                             Text("IVA incluido", fontSize = 15.sp, color = GrisTexto)
                         }
-                        Text(euros(vm.total), fontSize = 40.sp, fontWeight = FontWeight.Black, color = Tinta)
+                        Text(euros(vm.total), fontSize = if (movil) 30.sp else 40.sp, fontWeight = FontWeight.Black, color = Tinta)
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(if (movil) 10.dp else 16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         OutlinedButton(
                             onClick = vm::seguirPidiendo,
                             enabled = !enviando,
                             shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                            modifier = Modifier.weight(1f).heightIn(min = 76.dp),
-                        ) { Text("Seguir pidiendo", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Tinta) }
+                            modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 76.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) { Text("Seguir pidiendo", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
                         Button(
                             onClick = vm::confirmar,
                             enabled = !enviando && vm.lineas.isNotEmpty(),
                             colors = ButtonDefaults.buttonColors(containerColor = Ambar, contentColor = Tinta),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1.4f).heightIn(min = 76.dp),
+                            modifier = Modifier.weight(1.4f).heightIn(min = if (movil) 60.dp else 76.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                         ) {
                             if (enviando) CircularProgressIndicator(color = Tinta, strokeWidth = 3.dp, modifier = Modifier.size(30.dp))
-                            else Text("Finalizar pedido", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                            else Text("Finalizar pedido", fontSize = if (movil) 18.sp else 22.sp, fontWeight = FontWeight.Black, maxLines = 1)
                         }
                     }
                 }
@@ -782,6 +798,10 @@ private fun FilaPedido(
     alEditar: () -> Unit,
     alCambiar: (Int) -> Unit,
 ) {
+    if (esMovil()) {
+        FilaPedidoMovil(linea, urlFoto, icono, bloqueado, alEditar, alCambiar)
+        return
+    }
     Surface(color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             ImagenProducto(urlFoto, icono, Modifier.size(88.dp).clip(RoundedCornerShape(14.dp)), tamanoIcono = 0.6f)
@@ -810,6 +830,48 @@ private fun FilaPedido(
                 textAlign = TextAlign.End,
                 modifier = Modifier.width(112.dp),
             )
+        }
+    }
+}
+
+/** En un móvil no cabe todo en una fila: nombre y precio arriba; editar y cantidad, debajo. */
+@Composable
+private fun FilaPedidoMovil(
+    linea: LineaCarrito,
+    urlFoto: String?,
+    @DrawableRes icono: Int,
+    bloqueado: Boolean,
+    alEditar: () -> Unit,
+    alCambiar: (Int) -> Unit,
+) {
+    Surface(color = Color.White, shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp) {
+        Column(Modifier.padding(12.dp)) {
+            Row {
+                ImagenProducto(urlFoto, icono, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), tamanoIcono = 0.6f)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(linea.producto.nombre, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
+                    if (linea.detalle.isNotBlank()) Text(linea.detalle, fontSize = 15.sp, color = GrisTexto)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(euros(linea.subtotal), fontSize = 19.sp, fontWeight = FontWeight.Black, color = Tinta)
+            }
+            if (!bloqueado) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (linea.editable) {
+                        OutlinedButton(
+                            onClick = alEditar,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(2.dp, Ambar),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                        ) { Text("Editar", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Tinta) }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = 48.dp)
+                }
+            }
         }
     }
 }

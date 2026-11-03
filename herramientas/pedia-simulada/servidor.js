@@ -197,6 +197,7 @@ const servidor = http.createServer((req, res) => {
           if (!item) return responder(res, 404, { error: 'línea de pedido no encontrada' });
           if (req.method === 'DELETE') p.items = p.items.filter((i) => i !== item);
           else if (body.cantidad != null) item.cantidad = Number(body.cantidad);
+          else { item.notas = (body.notas || '').trim() || null; log('>>> NOTA CAMBIADA', p.id, item.id, item.notas); }
           return responder(res, 200, completar(p));
         }
         if (resto === '/marcar-pagado') { p.estado_pago = 'pagado'; return responder(res, 200, p); }

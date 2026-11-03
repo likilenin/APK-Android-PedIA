@@ -375,7 +375,7 @@ fun PantallaAjustes(
                 Seccion("Seguridad") {
                     OutlinedTextField(
                         nuevoPin, { nuevoPin = it.filter(Char::isDigit).take(8) },
-                        label = { Text("Nuevo PIN de ajustes (mínimo 4 cifras)") }, singleLine = true,
+                        label = { Text("Nuevo PIN del menú del kiosko (mínimo 4 cifras)") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth(),
                     )
                 }

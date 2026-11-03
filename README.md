@@ -32,7 +32,7 @@ Kotlin + Jetpack Compose. Android 8.0 o superior.
 - Opciones de la mesa: imprimir cuenta (en la impresora de PedIA), cobrar en efectivo, cambiar de
   mesa, liberar mesa, quitar productos ya enviados.
 
-Los ajustes (conexión, impresora, PIN…) están protegidos con PIN. PIN de fábrica: `1234`.
+Ajustes abre directamente. El PIN (de fábrica: `1234`) solo se pide en el kiosko, tras los 5 toques en la esquina.
 
 ## Puesta en marcha
 

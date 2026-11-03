@@ -47,6 +47,7 @@ import com.pedia.movil.ui.Crema
 import com.pedia.movil.ui.GrisTexto
 import com.pedia.movil.ui.Rojo
 import com.pedia.movil.ui.Tinta
+import com.pedia.movil.ui.esMovil
 import com.pedia.movil.ui.euros
 
 // Pago del pedido del kiosko con la pasarela de Redsys de PedIA: tarjeta en la propia pantalla,
@@ -54,15 +55,16 @@ import com.pedia.movil.ui.euros
 
 @Composable
 fun ElegirPago(vm: KioscoVM) {
+    val movil = esMovil()
     Column(
         Modifier.fillMaxSize().background(Crema).padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(24.dp))
-        Text("¿Cómo quieres pagar?", fontSize = 40.sp, fontWeight = FontWeight.Black, color = Tinta, textAlign = TextAlign.Center)
+        Text("¿Cómo quieres pagar?", fontSize = if (movil) 30.sp else 40.sp, fontWeight = FontWeight.Black, color = Tinta, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text("Total a pagar", fontSize = 20.sp, color = GrisTexto)
-        Text(euros(vm.totalAPagar), fontSize = 52.sp, fontWeight = FontWeight.Black, color = Tinta)
+        Text(euros(vm.totalAPagar), fontSize = if (movil) 40.sp else 52.sp, fontWeight = FontWeight.Black, color = Tinta)
         vm.errorPago?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, color = Rojo, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 620.dp))
@@ -72,7 +74,7 @@ fun ElegirPago(vm: KioscoVM) {
             verticalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(150.dp)
+            val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(if (movil) 110.dp else 150.dp)
             if (vm.pagoTarjeta) BotonPago(R.drawable.ic_pago_tarjeta, "Tarjeta", "Paga aquí con tu tarjeta", tamano, vm::pagarConTarjeta)
             if (vm.pagoMovil) BotonPago(R.drawable.ic_pago_movil, "Con el móvil", "Escanea un QR y paga con tarjeta o Bizum", tamano, vm::pagarConMovil)
             if (vm.pagoCaja) BotonPago(R.drawable.ic_pago_caja, "En caja", "Paga en el mostrador con tu número", tamano, vm::pagarEnCaja)
@@ -91,13 +93,14 @@ fun ElegirPago(vm: KioscoVM) {
 
 @Composable
 private fun BotonPago(@DrawableRes icono: Int, titulo: String, texto: String, modifier: Modifier, alPulsar: () -> Unit) {
+    val movil = esMovil()
     Surface(onClick = alPulsar, color = Color.White, shape = RoundedCornerShape(28.dp), shadowElevation = 6.dp, modifier = modifier) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(96.dp))
-            Spacer(Modifier.width(24.dp))
+        Row(Modifier.fillMaxSize().padding(horizontal = if (movil) 18.dp else 28.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(if (movil) 64.dp else 96.dp))
+            Spacer(Modifier.width(if (movil) 14.dp else 24.dp))
             Column {
-                Text(titulo, fontSize = 36.sp, fontWeight = FontWeight.Black, color = Tinta)
-                Text(texto, fontSize = 18.sp, color = GrisTexto)
+                Text(titulo, fontSize = if (movil) 26.sp else 36.sp, fontWeight = FontWeight.Black, color = Tinta)
+                Text(texto, fontSize = if (movil) 16.sp else 18.sp, color = GrisTexto)
             }
         }
     }

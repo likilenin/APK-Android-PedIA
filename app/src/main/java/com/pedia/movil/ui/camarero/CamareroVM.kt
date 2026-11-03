@@ -15,6 +15,7 @@ import com.pedia.movil.datos.Producto
 import com.pedia.movil.datos.anadir
 import com.pedia.movil.datos.cambiarCantidad
 import com.pedia.movil.datos.mensajeUsuario
+import com.pedia.movil.datos.sustituir
 import kotlinx.coroutines.launch
 
 class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
@@ -94,6 +95,18 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
 
     fun cambiarCantidad(clave: String, delta: Int) = nuevas.cambiarCantidad(clave, delta)
 
+    /** Cambia lo que pide el cliente en una línea por enviar; con [soloUna], se separa una unidad con ese texto. */
+    fun editarNota(clave: String, notas: String, soloUna: Boolean) {
+        val linea = nuevas.firstOrNull { it.clave == clave } ?: return
+        val nueva = linea.copy(notas = notas.trim())
+        if (soloUna && linea.cantidad > 1) {
+            nuevas.cambiarCantidad(clave, -1)
+            nuevas.anadir(nueva.copy(cantidad = 1))
+        } else {
+            nuevas.sustituir(clave, nueva)
+        }
+    }
+
     private fun actualizarPedido(pedido: Pedido) {
         val mesa = pedido.mesaNumero?.trim()?.toIntOrNull()
         val sinEste = pedidosPorMesa.filterValues { it.id != pedido.id }
@@ -156,6 +169,11 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     }
 
     fun eliminarEnviada(pedido: Pedido, item: ItemPedido) = accion(null) { api.eliminarItem(pedido.id, item.id) }
+
+    fun editarNotaEnviada(pedido: Pedido, item: ItemPedido, notas: String) =
+        accion("✓ Cambio guardado en PedIA. Avisa a cocina: no se vuelve a imprimir") {
+            api.cambiarNotasItem(pedido.id, item.id, notas.trim())
+        }
 
     fun cobrarEnEfectivo(pedido: Pedido) =
         accion("✓ Mesa ${pedido.mesaNumero} cobrada en efectivo") { api.marcarPagado(pedido.id) }
