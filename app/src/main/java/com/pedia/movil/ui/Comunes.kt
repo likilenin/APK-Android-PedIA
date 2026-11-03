@@ -171,6 +171,12 @@ fun BotonRedondo(texto: String, tamano: Dp = 44.dp, activo: Boolean = true, alPu
         onClick = alPulsar,
         enabled = activo,
         shape = CircleShape,
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = Color(0xFFEFEFF1),
+            contentColor = Tinta,
+            disabledContainerColor = Color(0xFFF6F6F7),
+            disabledContentColor = Color(0xFFC4C4C8),
+        ),
         contentPadding = PaddingValues(0.dp),
         modifier = Modifier.size(tamano),
     ) { Text(texto, fontSize = (tamano.value * 0.5f).sp, fontWeight = FontWeight.Bold) }

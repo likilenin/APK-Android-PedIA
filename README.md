@@ -17,8 +17,10 @@ Kotlin + Jetpack Compose. Android 8.0 o superior.
 - Pantalla final con el número de pedido en grande e impresión del ticket del cliente en una
   impresora térmica de red (ESC/POS, puerto 9100, 58 u 80 mm).
 - Si nadie toca la pantalla durante un rato pregunta «¿Sigues ahí?» y vuelve al inicio.
-- Pantalla completa (sin barras de Android) y fijada: los clientes no pueden salir de la app.
-  Menú del encargado: **5 toques seguidos en la esquina superior izquierda** de la bienvenida + PIN.
+- Pantalla completa (sin barras de Android). Opcionalmente fijada (Ajustes > Modo kiosko >
+  «Fijar la pantalla», desactivado por defecto) para que los clientes no puedan salir de la app.
+- Menú del encargado (ajustes, salir del kiosko): **engranaje arriba a la izquierda** de la
+  bienvenida + PIN.
 
 **Camarero**
 - Cuadrícula de mesas (el número de mesas sale de *Ajustes > Datos del local* de PedIA) que se

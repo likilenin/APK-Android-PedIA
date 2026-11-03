@@ -16,6 +16,14 @@ val Naranja = Color(0xFFEA580C)
 val NaranjaSuave = Color(0xFFFFEDD5)
 val Rojo = Color(0xFFDC2626)
 
+// Kiosko (estilo autoservicio de comida rápida): fondo crema, tarjetas blancas, acento ámbar.
+val Ambar = Color(0xFFFFB300)
+val AmbarSuave = Color(0xFFFFF4D6)
+val Tinta = Color(0xFF1C1C1E)
+val Crema = Color(0xFFF6F2EA)
+val GrisFoto = Color(0xFFF2F2F2)
+val GrisTexto = Color(0xFF6B7280)
+
 private val colores = lightColorScheme(
     primary = AzulPedia,
     onPrimary = Color.White,

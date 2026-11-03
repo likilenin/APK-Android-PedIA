@@ -14,6 +14,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -27,6 +28,13 @@ data class VersionPublicada(
     val versionName: String,
     val notas: String = "",
 )
+
+/** Qué se ha sabido al buscar actualizaciones. */
+sealed interface Comprobacion {
+    data class Nueva(val version: VersionPublicada) : Comprobacion
+    data object AlDia : Comprobacion
+    data class Fallo(val mensaje: String) : Comprobacion
+}
 
 /** Resultado que el sistema comunica al terminar (o fallar) la instalación. */
 object EstadoInstalacion {
@@ -54,17 +62,30 @@ object Actualizador {
         if (repo.startsWith("http")) "${repo.trimEnd('/')}/$archivo"
         else "https://github.com/$repo/releases/latest/download/$archivo"
 
-    /** Devuelve la versión publicada si es más nueva que la instalada; null si no hay o no se puede saber. */
-    suspend fun buscar(repo: String): VersionPublicada? = withContext(Dispatchers.IO) {
-        if (!formatoRepo.matches(repo)) return@withContext null
-        runCatching {
+    /** Pregunta por la última versión publicada y la compara con la instalada. */
+    suspend fun comprobar(repo: String): Comprobacion = withContext(Dispatchers.IO) {
+        if (!formatoRepo.matches(repo)) return@withContext Comprobacion.Fallo("El repositorio no es válido: escribe usuario/nombre.")
+        try {
             val peticion = Request.Builder().url(urlDescarga(repo, NOMBRE_VERSION)).header("Cache-Control", "no-cache").build()
             http.newCall(peticion).execute().use { respuesta ->
-                if (!respuesta.isSuccessful) null
-                else PediaApi.json.decodeFromString<VersionPublicada>(respuesta.body?.string().orEmpty())
+                when {
+                    respuesta.code == 404 -> Comprobacion.Fallo("No hay ninguna versión publicada en $repo.")
+                    !respuesta.isSuccessful -> Comprobacion.Fallo("El servidor de actualizaciones ha respondido ${respuesta.code}.")
+                    else -> {
+                        val version = PediaApi.json.decodeFromString<VersionPublicada>(respuesta.body?.string().orEmpty())
+                        if (version.versionCode > BuildConfig.VERSION_CODE) Comprobacion.Nueva(version) else Comprobacion.AlDia
+                    }
+                }
             }
-        }.getOrNull()?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+        } catch (e: IOException) {
+            Comprobacion.Fallo("No se ha podido conectar. Comprueba que este dispositivo tiene internet.")
+        } catch (e: SerializationException) {
+            Comprobacion.Fallo("El archivo de versión publicado no es válido.")
+        }
     }
+
+    /** Devuelve la versión publicada si es más nueva que la instalada; null si no hay o no se puede saber. */
+    suspend fun buscar(repo: String): VersionPublicada? = (comprobar(repo) as? Comprobacion.Nueva)?.version
 
     /** Descarga el APK al almacenamiento interno informando del progreso (bytes descargados, total o -1). */
     suspend fun descargar(contexto: Context, repo: String, alProgreso: (Long, Long) -> Unit): File =

@@ -89,8 +89,8 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
         mesaAbierta = null
     }
 
-    fun anadir(producto: Producto, cantidad: Int = 1, notas: String = "") =
-        nuevas.anadir(LineaCarrito(producto, cantidad, notas))
+    fun anadir(producto: Producto, cantidad: Int = 1, notas: String = "", selecciones: List<Long> = emptyList()) =
+        nuevas.anadir(LineaCarrito(producto, cantidad, notas, selecciones))
 
     fun cambiarCantidad(clave: String, delta: Int) = nuevas.cambiarCantidad(clave, delta)
 
@@ -114,7 +114,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
                 val existente = pedidosPorMesa[mesa]
                 if (existente == null) {
                     val notas = ajustes.nombreCamarero.takeIf { it.isNotBlank() }?.let { "Camarero: $it" }
-                    actualizarPedido(api.crearPedido("mesa", mesa, notas, nuevas.toList()))
+                    actualizarPedido(api.crearPedido("mesa", mesa, notas, nuevas.toList(), origen = "camarero"))
                     nuevas.clear()
                 } else {
                     // Una a una, quitando de la lista lo que ya ha llegado: si algo falla a

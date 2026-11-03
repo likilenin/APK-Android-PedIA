@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -82,11 +83,11 @@ fun PantallaInicio(ajustes: Ajustes, alElegirModo: (Modo) -> Unit, alAbrirAjuste
                 .align(Alignment.Center)
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
-                .widthIn(max = 900.dp),
+                .widthIn(max = 760.dp),
         ) {
-            LogoPedia(tamano = 48, latido = false)
-            Spacer(Modifier.height(12.dp))
-            Text("¿Cómo vas a usar este dispositivo?", color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
+            LogoPedia(tamano = 150, latido = false)
+            Spacer(Modifier.height(16.dp))
+            Text("¿Qué modo quieres usar?", color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(28.dp))
 
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -101,15 +102,16 @@ fun PantallaInicio(ajustes: Ajustes, alElegirModo: (Modo) -> Unit, alAbrirAjuste
                         alElegirModo(Modo.CAMARERO)
                     }
                 }
+                // Las dos opciones siempre del mismo tamaño: cuadradas o, en un móvil, a lo ancho.
                 if (ancho) {
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        kiosko(Modifier.weight(1f))
-                        camarero(Modifier.weight(1f))
+                        kiosko(Modifier.weight(1f).aspectRatio(1f))
+                        camarero(Modifier.weight(1f).aspectRatio(1f))
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        kiosko(Modifier.fillMaxWidth())
-                        camarero(Modifier.fillMaxWidth())
+                        kiosko(Modifier.fillMaxWidth().height(270.dp))
+                        camarero(Modifier.fillMaxWidth().height(270.dp))
                     }
                 }
             }
@@ -148,12 +150,17 @@ private fun TarjetaModo(emoji: String, titulo: String, texto: String, modifier: 
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         modifier = modifier.clip(RoundedCornerShape(28.dp)).clickable(onClick = alPulsar),
     ) {
-        Column(Modifier.padding(28.dp)) {
-            Text(emoji, fontSize = 56.sp)
-            Spacer(Modifier.height(12.dp))
-            Text(titulo, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Text(texto, color = Color.White.copy(alpha = 0.75f), fontSize = 16.sp)
+        Column(
+            Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(emoji, fontSize = 72.sp)
+            Spacer(Modifier.height(16.dp))
+            Text(titulo, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            // Con el mismo número de líneas, los dibujos y los títulos quedan a la misma altura.
+            Text(texto, color = Color.White.copy(alpha = 0.75f), fontSize = 17.sp, textAlign = TextAlign.Center, minLines = 3)
         }
     }
 }

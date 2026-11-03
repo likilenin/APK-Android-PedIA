@@ -2,6 +2,7 @@ package com.pedia.movil.datos
 
 import android.content.Context
 import com.pedia.movil.BuildConfig
+import com.pedia.movil.impresion.TipoImpresora
 
 enum class Modo { KIOSCO, CAMARERO }
 
@@ -50,12 +51,47 @@ class Ajustes(contexto: Context) {
         get() = prefs.getInt("ancho_papel", 80)
         set(v) = guardarEntero("ancho_papel", v)
 
-    var piePagina: String
-        get() = texto("pie_pagina", "¡Gracias por tu pedido!\nPaga en caja indicando tu número.")
-        set(v) = guardarTexto("pie_pagina", v)
+    /** Dónde sale el ticket. Si nunca se ha elegido, red si ya había IP de impresora (versiones anteriores). */
+    var impresoraTipo: TipoImpresora
+        get() = TipoImpresora.entries.firstOrNull { it.name == texto("impresora_tipo") }
+            ?: if (impresoraIp.isNotBlank()) TipoImpresora.RED else TipoImpresora.NINGUNA
+        set(v) = guardarTexto("impresora_tipo", v.name)
 
+    var bluetoothDireccion: String
+        get() = texto("bluetooth_direccion")
+        set(v) = guardarTexto("bluetooth_direccion", v)
+
+    var bluetoothNombre: String
+        get() = texto("bluetooth_nombre")
+        set(v) = guardarTexto("bluetooth_nombre", v)
+
+    /** Imprimir el ticket del cliente al hacer el pedido en el kiosko. */
+    var imprimirAlPedir: Boolean
+        get() = prefs.getBoolean("imprimir_al_pedir", true)
+        set(v) = guardarSiNo("imprimir_al_pedir", v)
+
+    /** Último ticket guardado en PDF (para abrirlo desde Ajustes). */
+    var ultimoPdf: String
+        get() = texto("ultimo_pdf")
+        set(v) = guardarTexto("ultimo_pdf", v)
+
+    // Formas de pago que ofrece el kiosko al terminar el pedido.
+    var pagoTarjeta: Boolean
+        get() = prefs.getBoolean("pago_tarjeta", true)
+        set(v) = guardarSiNo("pago_tarjeta", v)
+
+    var pagoMovil: Boolean
+        get() = prefs.getBoolean("pago_movil", true)
+        set(v) = guardarSiNo("pago_movil", v)
+
+    var pagoCaja: Boolean
+        get() = prefs.getBoolean("pago_caja", true)
+        set(v) = guardarSiNo("pago_caja", v)
+
+    // Desactivado por defecto: mientras se prueba, la fijación de Android bloquea la tablet
+    // y su aviso tapa la app. Se activa en Ajustes cuando la tablet va al local.
     var kioscoFijarPantalla: Boolean
-        get() = prefs.getBoolean("kiosco_fijar_pantalla", true)
+        get() = prefs.getBoolean("kiosco_fijar_pantalla", false)
         set(v) = guardarSiNo("kiosco_fijar_pantalla", v)
 
     /** Segundos sin tocar la pantalla del kiosko antes de preguntar "¿Sigues ahí?". */

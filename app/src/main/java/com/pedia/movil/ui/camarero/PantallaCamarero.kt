@@ -102,6 +102,8 @@ import com.pedia.movil.ui.SelectorCantidad
 import com.pedia.movil.ui.Verde
 import com.pedia.movil.ui.VerdeSuave
 import com.pedia.movil.ui.euros
+import com.pedia.movil.ui.kiosco.FichaProductoKiosco
+import com.pedia.movil.ui.kiosco.iconoCategoria
 import com.pedia.movil.ui.minutosDesde
 import com.pedia.movil.ui.textoEstado
 import com.pedia.movil.ui.textoTiempo
@@ -474,7 +476,8 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
                             enabled = disponible,
                             onClick = {
                                 vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                vm.anadir(producto)
+                                // Un menú hay que elegirlo (bebida, patatas...): abre su ficha.
+                                if (producto.esMenu) detalle = producto else vm.anadir(producto)
                             },
                             onLongClick = {
                                 vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -508,14 +511,25 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
     }
 
     detalle?.let { producto ->
-        DialogoProducto(
-            producto = producto,
-            urlFoto = api.urlFoto(producto.fotoPath),
-            textoBoton = "Añadir",
-            permitirNota = true,
-            alAnadir = { cantidad, notas -> vm.anadir(producto, cantidad, notas); detalle = null },
-            alCerrar = { detalle = null },
-        )
+        if (producto.esMenu) {
+            FichaProductoKiosco(
+                producto = producto,
+                carta = carta,
+                urlFoto = api.urlFoto(producto.fotoPath),
+                icono = iconoCategoria(carta.categorias.firstOrNull { it.id == producto.categoriaId }?.nombre.orEmpty()),
+                alAnadir = { linea -> vm.anadir(producto, linea.cantidad, linea.notas, linea.selecciones); detalle = null },
+                alCerrar = { detalle = null },
+            )
+        } else {
+            DialogoProducto(
+                producto = producto,
+                urlFoto = api.urlFoto(producto.fotoPath),
+                textoBoton = "Añadir",
+                permitirNota = true,
+                alAnadir = { cantidad, notas -> vm.anadir(producto, cantidad, notas); detalle = null },
+                alCerrar = { detalle = null },
+            )
+        }
     }
 }
 
@@ -585,7 +599,7 @@ private fun FilaNueva(linea: LineaCarrito, alCambiar: (Int) -> Unit) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(linea.producto.nombre, fontWeight = FontWeight.Bold)
-                if (linea.notas.isNotBlank()) Text(linea.notas, fontSize = 13.sp, color = Color.DarkGray)
+                if (linea.detalle.isNotBlank()) Text(linea.detalle, fontSize = 13.sp, color = Color.DarkGray)
                 Text(euros(linea.subtotal), fontSize = 13.sp, color = Color.DarkGray)
             }
             SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = 40.dp)

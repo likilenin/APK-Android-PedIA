@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pago con el móvil escaneando un QR (a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M16,4H32A3,3 0,0 1,35 7V41A3,3 0,0 1,32 44H16A3,3 0,0 1,13 41V7A3,3 0,0 1,16 4Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:fillColor="#00000000" />
+    <path android:pathData="M21.5,39.5H26.5"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M17.5,12H23V17.5H17.5ZM25,12H30.5V17.5H25ZM17.5,19.5H23V25H17.5Z"
+        android:strokeWidth="1.8" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M25.5,20H27.5M29,20V22.5M25.5,23.5H27.5V25.5M30,24.5V26"
+        android:strokeWidth="1.8" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>

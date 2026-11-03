@@ -19,6 +19,7 @@ firma/
 # Datos que genera el PedIA simulado
 herramientas/pedia-simulada/tickets/
 herramientas/pedia-simulada/actualizaciones/
+herramientas/pedia-simulada/servidor.log
 
 # Capturas de pantalla de pruebas
 captura-*.png

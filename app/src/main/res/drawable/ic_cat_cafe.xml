@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Categoría: cafés y desayunos (taza humeante, a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M9.5,20H34.5V29.5C34.5,35.5 29.5,39.5 22,39.5C14.5,39.5 9.5,35.5 9.5,29.5Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M34.5,23H37C40,23 41.5,25.2 41.5,27.5C41.5,30 39.5,32 36.8,32H33.8"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M6,43.5H38M17,15.5C15,12.5 19,10.5 17,6.5M24.5,15.5C22.5,12.5 26.5,10.5 24.5,6.5"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>

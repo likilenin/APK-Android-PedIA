@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!-- Solo para poder volver a abrirse sola después de actualizarse (Ajustes > Actualizaciones). -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Impresoras de tickets Bluetooth (ya emparejadas en Android). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
         android:allowBackup="false"

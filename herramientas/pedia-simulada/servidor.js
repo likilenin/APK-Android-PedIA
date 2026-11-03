@@ -11,6 +11,7 @@ const CARPETA = __dirname;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 const categorias = [
+  { id: 5, nombre: 'Menús', orden: -1, activo: 1 },
   { id: 1, nombre: 'Hamburguesas', orden: 0, activo: 1 },
   { id: 2, nombre: 'Pizzas', orden: 1, activo: 1 },
   { id: 3, nombre: 'Bebidas', orden: 2, activo: 1 },
@@ -34,10 +35,31 @@ const productos = [
   P(4, 'Tarta de queso', 550),
   P(4, 'Helado', 400),
   P(9, 'Pedido telefónico (automático)', 0, { disponible: 0 }),
+  P(5, 'Menú Hamburguesa', 900, {
+    descripcion: 'Hamburguesa, patatas y bebida',
+    grupos: [
+      { id: 1, nombre: 'Hamburguesa', obligatorio: true, max_selecciones: 1, opciones: [
+        { id: 11, texto: 'Hamburguesa clásica', suplemento: 0, producto_id: null, agotada: false },
+        { id: 12, texto: 'Doble carne', suplemento: 200, producto_id: 2, agotada: false },
+        { id: 13, texto: 'Pollo crispy', suplemento: 0, producto_id: null, agotada: true },
+      ] },
+      { id: 2, nombre: 'Bebida', obligatorio: true, max_selecciones: 1, opciones: [
+        { id: 21, texto: 'Coca-Cola', suplemento: 0, producto_id: 7, agotada: false },
+        { id: 22, texto: 'Agua', suplemento: 0, producto_id: 8, agotada: false },
+        { id: 23, texto: 'Cerveza', suplemento: 50, producto_id: 9, agotada: false },
+      ] },
+      { id: 3, nombre: 'Extras', obligatorio: false, max_selecciones: 2, opciones: [
+        { id: 31, texto: 'Bacon', suplemento: 100, producto_id: null, agotada: false },
+        { id: 32, texto: 'Queso extra', suplemento: 50, producto_id: null, agotada: false },
+      ] },
+    ],
+  }),
 ];
+for (const p of productos) if (!p.grupos) p.grupos = [];
 const config = [
   { clave: 'local_nombre', valor: 'Burger Pryto', cifrado: false },
   { clave: 'mesas_cantidad', valor: '12', cifrado: false },
+  { clave: 'iva_porcentaje', valor: '10', cifrado: false },
 ];
 
 let pedidos = [];
@@ -52,7 +74,12 @@ const linea = (it) => {
   const prod = productos.find((x) => x.id === it.producto_id);
   if (!prod) throw Object.assign(new Error(`producto ${it.producto_id} no existe`), { status: 400 });
   if (!prod.disponible) throw Object.assign(new Error(`producto "${prod.nombre}" no está disponible`), { status: 409 });
-  return { id: siguienteItem++, producto_id: prod.id, cantidad: it.cantidad || 1, precio_unitario: prod.precio, notas: it.notas || null, producto_nombre: prod.nombre };
+  const elegidas = prod.grupos.flatMap((g) => g.opciones).filter((o) => (it.selecciones || []).includes(o.id));
+  const faltan = prod.grupos.filter((g) => g.obligatorio && !g.opciones.some((o) => elegidas.includes(o)));
+  if (faltan.length) throw Object.assign(new Error(`Falta elegir: ${faltan.map((g) => g.nombre).join(', ')}`), { status: 400 });
+  const notas = [...elegidas.map((o) => o.texto), ...(it.notas ? [it.notas] : [])].join(', ') || null;
+  const precio = prod.precio + elegidas.reduce((s, o) => s + o.suplemento, 0);
+  return { id: siguienteItem++, producto_id: prod.id, cantidad: it.cantidad || 1, precio_unitario: precio, notas, producto_nombre: prod.nombre, producto_iva_porcentaje: null };
 };
 
 // Un pedido de ejemplo ya abierto en la mesa 3, hace 25 minutos.
@@ -89,6 +116,38 @@ const servidor = http.createServer((req, res) => {
         return;
       }
       if (ruta === '/api/health') return responder(res, 200, { ok: true });
+      let mp;
+      if ((mp = ruta.match(/^\/pago\/(\d+)\/tarjeta$/))) {
+        const id = mp[1];
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#f4f6f9">
+<h2>Pasarela de pago SIMULADA</h2><p>Pedido ${id} · en la real aquí sale el formulario de tarjeta de Redsys</p>
+<p><a id="pagar" href="/pago/${id}/simular-ok" style="display:inline-block;padding:18px 40px;background:#2f6fed;color:#fff;border-radius:12px;font-size:22px;text-decoration:none">Pagar</a></p>
+<p><a id="cancelar" href="/pago/ko" style="font-size:20px">Cancelar</a></p></body></html>`);
+      }
+      if ((mp = ruta.match(/^\/pago\/(\d+)\/simular-ok$/))) {
+        const p = pedidos.find((x) => x.id === Number(mp[1]));
+        if (p) {
+          p.estado_pago = 'pagado'; p.metodo_pago = 'tarjeta'; log('>>> PAGADO CON TARJETA (simulado)', p.id);
+          if (p.cocina_retenida) { p.cocina_retenida = 0; log('>>> COMANDA A COCINA', p.id, '(al cobrarse)'); }
+        }
+        res.writeHead(302, { Location: '/pago/ok' });
+        return res.end();
+      }
+      if (ruta === '/pago/ok' || ruta === '/pago/ko') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(ruta === '/pago/ok' ? '<h1>Pago realizado</h1>' : '<h1>Pago no completado</h1>');
+      }
+      // Para probar el pago con el móvil: curl -X POST http://localhost:4100/simular-pago/ID
+      if ((mp = ruta.match(/^\/simular-pago\/(\d+)$/))) {
+        const p = pedidos.find((x) => x.id === Number(mp[1]));
+        if (!p) return responder(res, 404, { error: 'no existe' });
+        p.estado_pago = 'pagado'; p.metodo_pago = 'tarjeta';
+        log('>>> PAGADO CON EL MÓVIL (simulado)', p.id);
+        if (p.cocina_retenida) { p.cocina_retenida = 0; log('>>> COMANDA A COCINA', p.id, '(al cobrarse)'); }
+        return responder(res, 200, { ok: true });
+      }
       if (ruta === '/api/categorias') return responder(res, 200, categorias);
       if (ruta === '/api/productos') return responder(res, 200, productos);
       if (ruta === '/api/config') return responder(res, 200, config);
@@ -101,9 +160,11 @@ const servidor = http.createServer((req, res) => {
         const p = completar({
           id: siguientePedido, numero_dia: siguientePedido++, tipo: body.tipo, mesa_numero: body.mesa_numero || null,
           estado: 'pendiente', estado_pago: 'pendiente', notas: body.notas || null, created_at: ahoraUtc(), items: body.items.map(linea),
+          origen: body.origen || 'tpv', pago_previsto: body.pago_previsto || null, cocina_retenida: body.retener_cocina ? 1 : 0,
         });
         pedidos.push(p);
         log('>>> PEDIDO NUEVO', JSON.stringify(p));
+        if (!p.cocina_retenida) log('>>> COMANDA A COCINA', p.id, '(al crear el pedido)');
         return responder(res, 201, p);
       }
       const m = ruta.match(/^\/api\/pedidos\/(\d+)(\/.*)?$/);
@@ -112,6 +173,18 @@ const servidor = http.createServer((req, res) => {
         if (!p) return responder(res, 404, { error: 'pedido no encontrado' });
         const resto = m[2] || '';
         let mi;
+        if (resto === '' && req.method === 'GET') return responder(res, 200, p);
+        if (resto === '' && req.method === 'DELETE') {
+          pedidos = pedidos.filter((x) => x !== p);
+          log('>>> PEDIDO BORRADO', p.id);
+          return responder(res, 204);
+        }
+        if (resto === '/liberar-cocina') {
+          p.pago_previsto = body.pago_previsto || p.pago_previsto;
+          if (p.cocina_retenida) { p.cocina_retenida = 0; log('>>> COMANDA A COCINA', p.id, '(pagará en caja)'); }
+          return responder(res, 200, p);
+        }
+        if (resto === '/pago-qr') return responder(res, 200, { url: `http://10.0.2.2:${PUERTO}/pago/${p.id}`, qrDataUrl: '' });
         if (resto === '/items' && req.method === 'POST') {
           const nueva = linea(body);
           const igual = p.items.find((i) => i.producto_id === nueva.producto_id && (i.notas || null) === nueva.notas);

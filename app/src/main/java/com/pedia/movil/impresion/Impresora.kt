@@ -1,23 +1,63 @@
 package com.pedia.movil.impresion
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
+import android.content.ContentValues
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.core.content.ContextCompat
 import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.datos.ErrorPedia
+import com.pedia.movil.datos.ItemPedido
 import com.pedia.movil.datos.Pedido
-import com.pedia.movil.ui.euros
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.nio.charset.Charset
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
-// Impresora térmica de tickets por red (ESC/POS en el puerto 9100, el estándar de casi
-// todas las impresoras de tickets con conexión de red o wifi).
+enum class TipoImpresora { NINGUNA, RED, BLUETOOTH, PDF }
+
+data class ImpresoraBluetooth(val nombre: String, val direccion: String)
+
+// Dónde sale el ticket del kiosko: impresora térmica por red (ESC/POS, puerto 9100), impresora
+// térmica Bluetooth ya emparejada en Android, o un PDF en Descargas/PedIA.
 object Impresora {
-    suspend fun enviar(ip: String, puerto: Int, datos: ByteArray) = withContext(Dispatchers.IO) {
+    private val SPP: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+    /** Imprime el ticket donde diga Ajustes. Devuelve un texto corto con el resultado. */
+    suspend fun imprimir(contexto: Context, ajustes: Ajustes, ticket: TicketPedia): String =
+        when (ajustes.impresoraTipo) {
+            TipoImpresora.NINGUNA -> throw ErrorPedia("No hay impresora configurada (Ajustes > Impresora de tickets).")
+            TipoImpresora.RED -> {
+                if (ajustes.impresoraIp.isBlank()) throw ErrorPedia("Falta la IP de la impresora de red.")
+                enviarRed(ajustes.impresoraIp, ajustes.impresoraPuerto, EscPosPedia.desde(ticket))
+                "Ticket enviado a ${ajustes.impresoraIp}"
+            }
+            TipoImpresora.BLUETOOTH -> {
+                if (ajustes.bluetoothDireccion.isBlank()) throw ErrorPedia("Falta elegir la impresora Bluetooth.")
+                enviarBluetooth(contexto, ajustes.bluetoothDireccion, EscPosPedia.desde(ticket))
+                "Ticket enviado a ${ajustes.bluetoothNombre.ifBlank { ajustes.bluetoothDireccion }}"
+            }
+            TipoImpresora.PDF -> {
+                val uri = guardarPdf(contexto, ticket, ajustes.anchoPapel)
+                ajustes.ultimoPdf = uri.toString()
+                "Ticket guardado en PDF (Descargas/PedIA)"
+            }
+        }
+
+    private suspend fun enviarRed(ip: String, puerto: Int, datos: ByteArray) = withContext(Dispatchers.IO) {
         try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(ip, puerto), 3000)
@@ -32,94 +72,84 @@ object Impresora {
         }
     }
 
-    suspend fun imprimir(ajustes: Ajustes, datos: ByteArray) {
-        if (ajustes.impresoraIp.isBlank()) throw ErrorPedia("No hay impresora configurada (Ajustes > Kiosko).")
-        enviar(ajustes.impresoraIp, ajustes.impresoraPuerto, datos)
-    }
-}
+    fun tienePermisoBluetooth(contexto: Context) =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(contexto, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
-/** Construye un ticket ESC/POS con la página de códigos Windows-1252 (tildes, ñ y €). */
-class TicketEscPos(private val columnas: Int) {
-    private val salida = ByteArrayOutputStream()
-    private val juego = Charset.forName("windows-1252")
-
-    init {
-        comando(0x1B, 0x40) // inicializar
-        comando(0x1B, 0x74, 16) // página de códigos WPC1252
+    /** Impresoras (y demás aparatos) ya emparejados en los ajustes de Bluetooth de Android. */
+    @SuppressLint("MissingPermission")
+    fun bluetoothEmparejadas(contexto: Context): List<ImpresoraBluetooth> {
+        if (!tienePermisoBluetooth(contexto)) throw ErrorPedia("Falta el permiso de Bluetooth.")
+        val adaptador = contexto.getSystemService(BluetoothManager::class.java)?.adapter
+            ?: throw ErrorPedia("Este dispositivo no tiene Bluetooth.")
+        if (!adaptador.isEnabled) throw ErrorPedia("El Bluetooth está apagado. Enciéndelo en los ajustes de Android.")
+        return adaptador.bondedDevices.map { ImpresoraBluetooth(it.name ?: it.address, it.address) }.sortedBy { it.nombre }
     }
 
-    private fun comando(vararg bytes: Int) = salida.write(ByteArray(bytes.size) { bytes[it].toByte() })
-
-    fun centrado() = apply { comando(0x1B, 0x61, 1) }
-    fun izquierda() = apply { comando(0x1B, 0x61, 0) }
-    fun negrita(si: Boolean) = apply { comando(0x1B, 0x45, if (si) 1 else 0) }
-
-    /** 1 = normal, 2 = doble, 3 = triple (alto y ancho). */
-    fun tamano(veces: Int) = apply {
-        val n = (veces - 1).coerceIn(0, 7)
-        comando(0x1D, 0x21, (n shl 4) or n)
-    }
-
-    fun texto(linea: String) = apply {
-        // El formato de euros usa espacios no separables, que algunas impresoras pintan raro.
-        salida.write(linea.replace(' ', ' ').replace(' ', ' ').toByteArray(juego))
-        salida.write(0x0A)
-    }
-
-    fun separador() = texto("-".repeat(columnas))
-
-    /** Texto a la izquierda e importe a la derecha; si no cabe, el texto se parte en varias líneas. */
-    fun fila(izquierda: String, derecha: String, cols: Int = columnas) = apply {
-        val hueco = (cols - derecha.length - 1).coerceAtLeast(8)
-        val trozos = izquierda.chunked(hueco).ifEmpty { listOf("") }
-        trozos.dropLast(1).forEach { texto(it) }
-        texto(trozos.last().padEnd(hueco) + " " + derecha.padStart(cols - hueco - 1))
-    }
-
-    fun avanzar(lineas: Int) = apply { repeat(lineas) { salida.write(0x0A) } }
-    fun cortar() = apply { comando(0x1D, 0x56, 66, 0) }
-
-    fun bytes(): ByteArray = salida.toByteArray()
-}
-
-object Tickets {
-    private val formatoFecha = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
-
-    private fun columnas(ajustes: Ajustes) = if (ajustes.anchoPapel == 58) 32 else 48
-
-    /** Ticket que se lleva el cliente del kiosko: número de pedido bien grande, lo pedido y el total. */
-    fun kiosco(ajustes: Ajustes, pedido: Pedido, nombreLocal: String, paraLlevar: Boolean): ByteArray {
-        val cols = columnas(ajustes)
-        val t = TicketEscPos(cols)
-        t.centrado().negrita(true).tamano(2).texto(nombreLocal.take(cols / 2)).tamano(1).negrita(false)
-        t.texto(LocalDateTime.now().format(formatoFecha))
-        t.separador()
-        t.texto("TU NÚMERO DE PEDIDO")
-        t.negrita(true).tamano(4).texto((pedido.numeroDia ?: pedido.id).toString()).tamano(1)
-        t.texto(if (paraLlevar) "PARA LLEVAR" else "PARA TOMAR AQUÍ").negrita(false)
-        t.separador().izquierda()
-        pedido.items.forEach { item ->
-            t.fila("${item.cantidad} x ${item.productoNombre ?: "Producto"}", euros(item.precioUnitario * item.cantidad))
-            item.notas?.takeIf { it.isNotBlank() }?.let { t.texto("   ($it)") }
+    @SuppressLint("MissingPermission")
+    private suspend fun enviarBluetooth(contexto: Context, direccion: String, datos: ByteArray) = withContext(Dispatchers.IO) {
+        if (!tienePermisoBluetooth(contexto)) throw ErrorPedia("Falta el permiso de Bluetooth (Ajustes > Impresora de tickets).")
+        val adaptador = contexto.getSystemService(BluetoothManager::class.java)?.adapter
+            ?: throw ErrorPedia("Este dispositivo no tiene Bluetooth.")
+        if (!adaptador.isEnabled) throw ErrorPedia("El Bluetooth está apagado.")
+        try {
+            adaptador.cancelDiscovery()
+            adaptador.getRemoteDevice(direccion).createRfcommSocketToServiceRecord(SPP).use { socket ->
+                socket.connect()
+                socket.outputStream.write(datos)
+                socket.outputStream.flush()
+                // Algunas impresoras pierden el final si se corta la conexión enseguida.
+                delay(400)
+            }
+        } catch (e: IOException) {
+            throw ErrorPedia("No se puede conectar con la impresora Bluetooth. ¿Está encendida y cerca?")
         }
-        t.separador()
-        t.negrita(true).tamano(2).fila("TOTAL", euros(pedido.total), cols / 2).tamano(1).negrita(false)
-        t.texto("IVA incluido")
-        t.estadoPago(pedido)
-        t.avanzar(1).centrado()
-        ajustes.piePagina.lines().filter { it.isNotBlank() }.forEach { t.texto(it) }
-        return t.avanzar(4).cortar().bytes()
     }
 
-    fun prueba(ajustes: Ajustes): ByteArray {
-        val t = TicketEscPos(columnas(ajustes))
-        t.centrado().negrita(true).tamano(2).texto("PedIA Móvil").tamano(1).negrita(false)
-        t.texto("Prueba de impresión").texto(LocalDateTime.now().format(formatoFecha))
-        t.separador().izquierda().fila("Tildes y eñes: áéíóú ñ", euros(1250)).separador()
-        return t.centrado().texto("Si lees esto bien, la impresora funciona.").avanzar(4).cortar().bytes()
+    /** Guarda el ticket en PDF: en Descargas/PedIA (Android 10+) o en la carpeta de la app (8 y 9). */
+    private suspend fun guardarPdf(contexto: Context, ticket: TicketPedia, anchoMm: Int): Uri = withContext(Dispatchers.IO) {
+        val nombre = "ticket-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".pdf"
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val valores = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, nombre)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/PedIA")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val resolver = contexto.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, valores)
+                    ?: throw IOException("Android no deja crear el archivo")
+                resolver.openOutputStream(uri)!!.use { PdfTicket.escribir(ticket, anchoMm, it) }
+                resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+                uri
+            } else {
+                val carpeta = File(contexto.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Tickets").apply { mkdirs() }
+                val archivo = File(carpeta, nombre)
+                archivo.outputStream().use { PdfTicket.escribir(ticket, anchoMm, it) }
+                Uri.fromFile(archivo)
+            }
+        } catch (e: IOException) {
+            throw ErrorPedia("No se ha podido guardar el PDF: ${e.message}")
+        }
     }
 
-    private fun TicketEscPos.estadoPago(pedido: Pedido) {
-        if (pedido.pagado) texto("PAGADO") else texto("PENDIENTE DE PAGO")
+    /** Ticket de ejemplo con el diseño de PedIA, para probar la impresora desde Ajustes. */
+    fun ticketPrueba(nombreLocal: String): TicketPedia {
+        val ahoraUtc = LocalDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        val pedido = Pedido(
+            id = 0,
+            tipo = "recogida",
+            estado = "pendiente",
+            estadoPago = "pagado",
+            total = 1700,
+            numeroDia = 0,
+            creadoEn = ahoraUtc,
+            items = listOf(
+                ItemPedido(1, 1, 2, 550, "sin cebolla, poco hecha", "Prueba: bocadillo"),
+                ItemPedido(2, 2, 1, 600, null, "Prueba: menú con tildes y eñes (áéíóú ñ)"),
+            ),
+        )
+        return PlantillaPedia.construir(pedido, nombreLocal.ifBlank { "PRUEBA DE IMPRESIÓN" }, 10.0, null)
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.pedia.movil.BuildConfig
+import com.pedia.movil.R
 import com.pedia.movil.actualizacion.Actualizador
 import com.pedia.movil.actualizacion.EstadoInstalacion
 import com.pedia.movil.actualizacion.VersionPublicada
@@ -270,9 +273,9 @@ private fun Notas(version: VersionPublicada) {
     Text(version.notas, color = Color.White.copy(alpha = 0.75f), modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
 }
 
-/** Logo de PedIA dibujado con texto (P azul + "edIA"), con un ligero latido. */
+/** Logo de PedIA, con un ligero latido. [tamano] es su altura en dp. */
 @Composable
-fun LogoPedia(tamano: Int = 56, latido: Boolean = true) {
+fun LogoPedia(tamano: Int = 170, latido: Boolean = true) {
     val transicion = rememberInfiniteTransition(label = "latido")
     val escala by transicion.animateFloat(
         initialValue = 1f,
@@ -280,14 +283,9 @@ fun LogoPedia(tamano: Int = 56, latido: Boolean = true) {
         animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
         label = "escala",
     )
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.scale(escala)) {
-        Box(
-            Modifier.size((tamano * 1.15f).dp).clip(RoundedCornerShape((tamano / 3).dp)).background(AzulPedia),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("P", color = Color.White, fontSize = (tamano * 0.8f).sp, fontWeight = FontWeight.Black)
-        }
-        Spacer(Modifier.size((tamano / 5).dp))
-        Text("PedIA", color = Color.White, fontSize = (tamano * 0.85f).sp, fontWeight = FontWeight.Black)
-    }
+    Image(
+        painterResource(R.drawable.logo_pedia),
+        contentDescription = "PedIA",
+        modifier = Modifier.height(tamano.dp).scale(escala),
+    )
 }

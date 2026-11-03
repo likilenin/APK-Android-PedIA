@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pago con tarjeta (a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M8,12H40A3,3 0,0 1,43 15V33A3,3 0,0 1,40 36H8A3,3 0,0 1,5 33V15A3,3 0,0 1,8 12Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:fillColor="#00000000" />
+    <path android:pathData="M5,19H43"
+        android:strokeWidth="3.5" android:strokeColor="#000000" android:fillColor="#00000000" />
+    <path android:pathData="M10,29H20M24,29H28"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M33,26a3,3 0,1 0,0.01 0M37.5,26a3,3 0,1 0,0.01 0"
+        android:strokeWidth="1.8" android:strokeColor="#000000" android:fillColor="#00000000" />
+</vector>

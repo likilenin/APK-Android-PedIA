@@ -92,17 +92,20 @@ class PediaApi(private val urlBase: String) {
 
     suspend fun salud(): Boolean = peticion("GET", "/api/health").contains("ok")
 
-    suspend fun categorias(): List<Categoria> = json.decodeFromString(peticion("GET", "/api/categorias"))
+    // Con canal ("kiosco"), PedIA solo devuelve lo que ese canal puede pedir.
+    suspend fun categorias(canal: String? = null): List<Categoria> =
+        json.decodeFromString(peticion("GET", "/api/categorias" + (canal?.let { "?canal=$it" } ?: "")))
 
-    suspend fun productos(): List<Producto> = json.decodeFromString(peticion("GET", "/api/productos"))
+    suspend fun productos(canal: String? = null): List<Producto> =
+        json.decodeFromString(peticion("GET", "/api/productos" + (canal?.let { "?canal=$it" } ?: "")))
 
     suspend fun configuracion(): Map<String, String> =
         json.decodeFromString<List<EntradaConfig>>(peticion("GET", "/api/config"))
             .associate { it.clave to (it.valor ?: "") }
 
-    suspend fun cargarCarta(): Carta = coroutineScope {
-        val cats = async { categorias() }
-        val prods = async { productos() }
+    suspend fun cargarCarta(canal: String? = null): Carta = coroutineScope {
+        val cats = async { categorias(canal) }
+        val prods = async { productos(canal) }
         val config = async { runCatching { configuracion() }.getOrDefault(emptyMap()) }
 
         val activas = cats.await().filter { it.activo == 1 }.sortedWith(compareBy({ it.orden }, { it.id }))
@@ -118,7 +121,44 @@ class PediaApi(private val urlBase: String) {
             productos = productos,
             nombreLocal = cfg["local_nombre"]?.takeIf { it.isNotBlank() } ?: "PedIA",
             mesas = cfg["mesas_cantidad"]?.toIntOrNull()?.takeIf { it > 0 } ?: 20,
+            ivaGeneral = cfg["iva_porcentaje"]?.replace(',', '.')?.toDoubleOrNull() ?: 10.0,
         )
+    }
+
+    suspend fun pedido(id: Long): Pedido = json.decodeFromString(peticion("GET", "/api/pedidos/$id"))
+
+    /** El cliente de un pedido retenido elige pagar en caja: la comanda ya puede ir a cocina. */
+    suspend fun liberarCocina(pedidoId: Long, pagoPrevisto: String) {
+        try {
+            peticion("POST", "/api/pedidos/$pedidoId/liberar-cocina", buildJsonObject { put("pago_previsto", pagoPrevisto) })
+        } catch (e: ErrorPedia) {
+            // Una PedIA sin esta ruta ya imprimió la comanda al crear el pedido: no hay nada que liberar.
+            if (e.codigoHttp != 404) throw e
+        }
+    }
+
+    suspend fun eliminarPedido(pedidoId: Long) {
+        peticion("DELETE", "/api/pedidos/$pedidoId")
+    }
+
+    /**
+     * Enlace de cobro de PedIA (el mismo del QR del ticket): abre la página de PedIA que lleva a
+     * Redsys. Falla si PedIA no puede cobrar online.
+     */
+    suspend fun urlPago(pedidoId: Long): String =
+        json.parseToJsonElement(peticion("GET", "/api/pedidos/$pedidoId/pago-qr"))
+            .jsonObject["url"]?.jsonPrimitive?.content
+            ?: throw ErrorPedia("PedIA no ha dado el enlace de pago.")
+
+    /**
+     * Ticket del cliente tal como lo imprime PedIA (con su plantilla editada). Solo existe si PedIA
+     * tiene GET /api/pedidos/:id/ticket (ver PROMPT-PEDIA.md); si no, devuelve null y la app usa su
+     * copia de la plantilla por defecto de PedIA.
+     */
+    suspend fun ticketDePedia(pedidoId: Long): TicketRemoto? = try {
+        json.decodeFromString<TicketRemoto>(peticion("GET", "/api/pedidos/$pedidoId/ticket"))
+    } catch (e: ErrorPedia) {
+        if (e.codigoHttp == 404) null else throw e
     }
 
     /** Pedidos de mesa abiertos (los mismos que PedIA marca como mesa ocupada). */
@@ -127,32 +167,42 @@ class PediaApi(private val urlBase: String) {
             peticion("GET", "/api/pedidos?estados=${ESTADOS_ACTIVOS_MESA.joinToString(",")}")
         ).filter { it.tipo == "mesa" }
 
-    suspend fun crearPedido(tipo: String, mesa: Int?, notas: String?, lineas: List<LineaCarrito>): Pedido {
+    private fun lineaJson(linea: LineaCarrito) = buildJsonObject {
+        put("producto_id", linea.producto.id)
+        put("cantidad", linea.cantidad)
+        if (linea.notas.isNotBlank()) put("notas", linea.notas)
+        // Menús: PedIA calcula el precio y el texto de la línea a partir de las opciones elegidas.
+        if (linea.selecciones.isNotEmpty()) putJsonArray("selecciones") { linea.selecciones.forEach { add(it) } }
+    }
+
+    /**
+     * [origen]: "kiosko" o "camarero". [pagoPrevisto]: "efectivo" o "tarjeta" (se ve en el tablero de PedIA).
+     * [retenerCocina]: pedido pendiente de cobro online: la comanda no se imprime hasta que se pague o se
+     * llame a [liberarCocina] (ver PROMPT-PEDIA.md; si PedIA aún no lo tiene, la imprime al crearlo).
+     */
+    suspend fun crearPedido(
+        tipo: String,
+        mesa: Int?,
+        notas: String?,
+        lineas: List<LineaCarrito>,
+        origen: String,
+        pagoPrevisto: String? = null,
+        retenerCocina: Boolean = false,
+    ): Pedido {
         val cuerpo = buildJsonObject {
             put("tipo", tipo)
+            put("origen", origen)
+            if (pagoPrevisto != null) put("pago_previsto", pagoPrevisto)
+            if (retenerCocina) put("retener_cocina", true)
             if (mesa != null) put("mesa_numero", mesa.toString())
             if (!notas.isNullOrBlank()) put("notas", notas)
-            putJsonArray("items") {
-                lineas.forEach { linea ->
-                    add(buildJsonObject {
-                        put("producto_id", linea.producto.id)
-                        put("cantidad", linea.cantidad)
-                        if (linea.notas.isNotBlank()) put("notas", linea.notas)
-                    })
-                }
-            }
+            putJsonArray("items") { lineas.forEach { add(lineaJson(it)) } }
         }
         return json.decodeFromString(peticion("POST", "/api/pedidos", cuerpo))
     }
 
-    suspend fun anadirItem(pedidoId: Long, linea: LineaCarrito): Pedido {
-        val cuerpo = buildJsonObject {
-            put("producto_id", linea.producto.id)
-            put("cantidad", linea.cantidad)
-            if (linea.notas.isNotBlank()) put("notas", linea.notas)
-        }
-        return json.decodeFromString(peticion("POST", "/api/pedidos/$pedidoId/items", cuerpo))
-    }
+    suspend fun anadirItem(pedidoId: Long, linea: LineaCarrito): Pedido =
+        json.decodeFromString(peticion("POST", "/api/pedidos/$pedidoId/items", lineaJson(linea)))
 
     suspend fun cambiarCantidadItem(pedidoId: Long, itemId: Long, cantidad: Int): Pedido =
         json.decodeFromString(

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Categoría: menús y combos (hamburguesa + bebida, a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M4.5,25C4.5,19 9,15.5 15.5,15.5C22,15.5 26.5,19 26.5,25Z"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M4.5,28.5H26.5"
+        android:strokeWidth="2.6" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M5.5,32H25.5C25.5,34.5 24,35.5 22,35.5H9C7,35.5 5.5,34.5 5.5,32Z"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M30,14H44L43.3,17.5H30.7Z"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M31.2,17.5L33,40H41L42.8,17.5M38.5,14L40.5,7.5H43.5"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+</vector>

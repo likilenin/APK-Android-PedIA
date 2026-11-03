@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Categoría: ensaladas (bol con hojas, a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M6.5,24H41.5C41.5,33 33.5,40 24,40C14.5,40 6.5,33 6.5,24Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M18,40.5L19,43.5H29L30,40.5"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M11,24C10.5,17 17,13.5 21.5,18M19,24C18.5,14.5 27,11 31,16.5M28.5,24C29,17.5 36,16 37.5,21.5"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Categoría: patatas, entrantes y complementos (caja de patatas fritas, a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M16.5,22V9M20.5,22V6.5M24.5,22V8M28.5,22V5.5M32,22V10"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M12.5,20Q24,27 35.5,20L32.5,43H15.5Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+</vector>

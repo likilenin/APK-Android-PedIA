@@ -1,5 +1,6 @@
 package com.pedia.movil
 
+import android.app.ActivityManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -58,7 +59,13 @@ class MainActivity : ComponentActivity() {
      * en Ajustes, se fija para que los clientes no puedan salir de ella.
      */
     private fun modoKiosco(activo: Boolean, fijar: Boolean) {
-        runCatching { if (activo && fijar) startLockTask() else stopLockTask() }
+        // Solo se pide fijar si no lo está ya: cada petición hace que Android vuelva a sacar su
+        // aviso «App is pinned», que tapa la app hasta que alguien lo cierra.
+        val fijada = getSystemService(ActivityManager::class.java)?.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+        runCatching {
+            if (activo && fijar && !fijada) startLockTask()
+            if (!(activo && fijar) && fijada) stopLockTask()
+        }
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             if (activo) hide(WindowInsetsCompat.Type.systemBars()) else show(WindowInsetsCompat.Type.systemBars())
@@ -72,6 +79,7 @@ private enum class Pantalla { ACTUALIZACION, INICIO, AJUSTES, KIOSCO, CAMARERO }
 private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Boolean) -> Unit) {
     var pantalla by rememberSaveable { mutableStateOf(Pantalla.ACTUALIZACION) }
     var volverDeAjustes by rememberSaveable { mutableStateOf(Pantalla.INICIO) }
+    var actualizandoDesdeAjustes by rememberSaveable { mutableStateOf(false) }
 
     fun pantallaDelModo() = when {
         !ajustes.servidorConfigurado -> Pantalla.INICIO
@@ -95,7 +103,18 @@ private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Bool
     }
 
     when (pantalla) {
-        Pantalla.ACTUALIZACION -> PantallaActualizacion(ajustes, alTerminar = { pantalla = pantallaDelModo() })
+        Pantalla.ACTUALIZACION -> PantallaActualizacion(
+            ajustes,
+            alTerminar = {
+                if (actualizandoDesdeAjustes) {
+                    actualizandoDesdeAjustes = false
+                    pantalla = Pantalla.AJUSTES
+                } else {
+                    // Cada vez que se abre la app se pregunta en qué modo se va a usar.
+                    cambiarModo()
+                }
+            },
+        )
         Pantalla.INICIO -> PantallaInicio(
             ajustes,
             alElegirModo = { modo ->
@@ -108,7 +127,10 @@ private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Bool
         Pantalla.AJUSTES -> PantallaAjustes(
             ajustes,
             alVolver = { pantalla = if (volverDeAjustes == Pantalla.INICIO) pantallaDelModo() else volverDeAjustes },
-            alBuscarActualizaciones = { pantalla = Pantalla.ACTUALIZACION },
+            alActualizar = {
+                actualizandoDesdeAjustes = true
+                pantalla = Pantalla.ACTUALIZACION
+            },
             alCambiarModo = ::cambiarModo,
         )
         Pantalla.KIOSCO -> PantallaKiosco(

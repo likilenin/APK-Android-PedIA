@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pago en caja (caja registradora, a línea). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M14,6H34V16H14Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M18,10H30"
+        android:strokeWidth="1.8" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M10,16H38L41,34H7Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M15,21H17M22,21H24M29,21H31M14.5,26H16.5M21.5,26H23.5M28.5,26H30.5"
+        android:strokeWidth="2.4" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M7,34H41V41A2,2 0,0 1,39 43H9A2,2 0,0 1,7 41Z"
+        android:strokeWidth="2.2" android:strokeColor="#000000" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M20,38.5H28"
+        android:strokeWidth="2" android:strokeColor="#000000" android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>
