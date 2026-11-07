@@ -14,6 +14,7 @@ import com.pedia.movil.datos.Pedido
 import com.pedia.movil.datos.Producto
 import com.pedia.movil.datos.anadir
 import com.pedia.movil.datos.cambiarCantidad
+import com.pedia.movil.datos.codigoMesa
 import com.pedia.movil.datos.mensajeUsuario
 import com.pedia.movil.datos.sustituir
 import kotlinx.coroutines.launch
@@ -25,15 +26,18 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
         private set
 
     /** Pedido abierto de cada mesa ocupada (el más reciente, como hace PedIA). */
-    var pedidosPorMesa by mutableStateOf<Map<Int, Pedido>>(emptyMap())
+    var pedidosPorMesa by mutableStateOf<Map<String, Pedido>>(emptyMap())
         private set
     var conectado by mutableStateOf<Boolean?>(null)
         private set
     var errorConexion by mutableStateOf<String?>(null)
         private set
 
-    var mesaAbierta by mutableStateOf<Int?>(null)
+    var mesaAbierta by mutableStateOf<String?>(null)
         private set
+
+    /** Zona que se está viendo en la pantalla de mesas (por su nombre: si PedIA quita una zona, no se salta a otra). */
+    var zonaElegida by mutableStateOf<String?>(null)
 
     /** Lo que se está apuntando para la mesa abierta y aún no se ha mandado a cocina. */
     val nuevas = mutableStateListOf<LineaCarrito>()
@@ -46,10 +50,6 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     var aviso by mutableStateOf<String?>(null)
 
     private val api get() = ajustes.api()
-
-    init {
-        cargarCarta()
-    }
 
     fun cargarCarta() {
         viewModelScope.launch {
@@ -66,7 +66,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
         try {
             val lista = api.pedidosDeMesaActivos()
             pedidosPorMesa = lista
-                .mapNotNull { p -> p.mesaNumero?.trim()?.toIntOrNull()?.let { it to p } }
+                .mapNotNull { p -> codigoMesa(p.mesaNumero)?.let { it to p } }
                 .groupBy({ it.first }, { it.second })
                 .mapValues { (_, pedidos) -> pedidos.maxBy { it.creadoEn } }
             conectado = true
@@ -78,9 +78,9 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
         }
     }
 
-    fun pedidoDe(mesa: Int?) = mesa?.let { pedidosPorMesa[it] }
+    fun pedidoDe(mesa: String?) = mesa?.let { pedidosPorMesa[it] }
 
-    fun abrirMesa(mesa: Int) {
+    fun abrirMesa(mesa: String) {
         nuevas.clear()
         mesaAbierta = mesa
     }
@@ -116,7 +116,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     }
 
     private fun actualizarPedido(pedido: Pedido) {
-        val mesa = pedido.mesaNumero?.trim()?.toIntOrNull()
+        val mesa = codigoMesa(pedido.mesaNumero)
         val sinEste = pedidosPorMesa.filterValues { it.id != pedido.id }
         pedidosPorMesa = if (mesa != null && pedido.estado in listOf("pendiente", "aceptado", "en_preparacion", "listo"))
             sinEste + (mesa to pedido) else sinEste
@@ -187,7 +187,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
         accion("✓ Mesa ${pedido.mesaNumero} cobrada en efectivo") { api.marcarPagado(pedido.id) }
 
     fun cerrarComanda(pedido: Pedido) =
-        accion("✓ Comanda de la mesa ${pedido.mesaNumero} cerrada: PedIA imprime el ticket", cerrar = true) {
+        accion("✓ Comanda de la mesa ${pedido.mesaNumero} cerrada: ticket impreso en PedIA", cerrar = true) {
             api.cerrarComanda(pedido.id)
             null
         }
@@ -195,7 +195,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     fun liberarMesa(pedido: Pedido) =
         accion("✓ Mesa ${pedido.mesaNumero} libre", cerrar = true) { api.liberarMesa(pedido.id) }
 
-    fun cambiarDeMesa(pedido: Pedido, nueva: Int) = accion("✓ Pedido pasado a la mesa $nueva", cerrar = true) {
+    fun cambiarDeMesa(pedido: Pedido, nueva: String) = accion("✓ Pedido pasado a la mesa $nueva", cerrar = true) {
         api.cambiarMesa(pedido.id, nueva)
     }
 }

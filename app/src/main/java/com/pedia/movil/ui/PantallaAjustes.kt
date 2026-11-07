@@ -209,7 +209,7 @@ fun PantallaAjustes(
                             alcance.launch {
                                 resultadoConexion = try {
                                     val carta = PediaApi("http://${ip.trim()}:${puerto.toIntOrNull() ?: 4000}").cargarCarta()
-                                    "✓ Conectado con ${carta.nombreLocal}: ${carta.productos.size} productos, ${carta.mesas} mesas."
+                                    "✓ Conectado con ${carta.nombreLocal}: ${carta.productos.size} productos, ${carta.zonas.sumOf { it.cantidad }} mesas."
                                 } catch (e: Exception) {
                                     "✗ ${e.mensajeUsuario()}"
                                 }

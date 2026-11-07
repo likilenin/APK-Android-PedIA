@@ -120,6 +120,6 @@ app/src/main/java/com/pedia/movil/
 
 `GET /api/health`, `/api/categorias`, `/api/productos`, `/api/config`,
 `/api/pedidos?estados=…`; `POST /api/pedidos`, `/api/pedidos/:id/items`,
-`/api/pedidos/:id/marcar-pagado`, `/liberar-mesa`, `/cerrar-comanda`;
+`/api/pedidos/:id/marcar-pagado`, `/liberar-mesa`, `/reimprimir`;
 `PATCH /api/pedidos/:id/mesa`, `/api/pedidos/:id/items/:itemId`;
 `DELETE /api/pedidos/:id/items/:itemId`. No hace falta ningún cambio en PedIA.

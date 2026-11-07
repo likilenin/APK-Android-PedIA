@@ -83,6 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pedia.movil.datos.Ajustes
@@ -90,6 +91,7 @@ import com.pedia.movil.datos.ItemPedido
 import com.pedia.movil.datos.LineaCarrito
 import com.pedia.movil.datos.Pedido
 import com.pedia.movil.datos.Producto
+import com.pedia.movil.datos.ZonaMesas
 import com.pedia.movil.ui.AvisoError
 import com.pedia.movil.ui.AzulPedia
 import com.pedia.movil.ui.AzulSuave
@@ -104,8 +106,6 @@ import com.pedia.movil.ui.SelectorCantidad
 import com.pedia.movil.ui.Verde
 import com.pedia.movil.ui.VerdeSuave
 import com.pedia.movil.ui.euros
-import com.pedia.movil.ui.kiosco.FichaProductoKiosco
-import com.pedia.movil.ui.kiosco.iconoCategoria
 import com.pedia.movil.ui.minutosDesde
 import com.pedia.movil.ui.textoEstado
 import com.pedia.movil.ui.textoTiempo
@@ -118,6 +118,10 @@ fun PantallaCamarero(ajustes: Ajustes, alAbrirAjustes: () -> Unit, alCambiarModo
     val vm: CamareroVM = viewModel { CamareroVM(ajustes) }
     val avisos = remember { SnackbarHostState() }
     val ciclo = LocalLifecycleOwner.current.lifecycle
+
+    // Cada vez que se abre la app (o se vuelve a ella) se piden de nuevo a PedIA la carta y las mesas de
+    // cada zona: lo que se cambie en el TPV se ve sin tener que recargar a mano.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.cargarCarta() }
 
     // Las mesas se refrescan solas mientras la pantalla está encendida: así se ve al
     // momento lo que piden otros camareros o el propio TPV.
@@ -157,7 +161,12 @@ private fun PantallaMesas(
 ) {
     var menu by remember { mutableStateOf(false) }
     val carta = vm.carta
-    val mesas = carta?.mesas ?: 20
+    val zonas = carta?.zonas ?: listOf(ZonaMesas("Mesas", "", 20))
+    // Pedidos de mesas que no están en ninguna zona (números de antes de las zonas): se enseñan aparte para no perderlos.
+    val conocidas = zonas.flatMap { it.mesas }.toSet()
+    val otras = vm.pedidosPorMesa.keys.filter { it !in conocidas }.sorted()
+    val pestanas = zonas.map { it.nombre to it.mesas } + if (otras.isNotEmpty()) listOf("Otras" to otras) else emptyList()
+    val pestana = pestanas.indexOfFirst { it.first == vm.zonaElegida }.coerceAtLeast(0)
 
     Scaffold(
         snackbarHost = { SnackbarHost(avisos) },
@@ -192,15 +201,27 @@ private fun PantallaMesas(
         Column(Modifier.padding(relleno).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             vm.errorConexion?.let { Box(Modifier.padding(12.dp)) { AvisoError(it) } }
             vm.errorCarta?.let { if (carta == null) Box(Modifier.padding(12.dp)) { AvisoError(it, vm::cargarCarta) } }
-            Leyenda(vm.pedidosPorMesa.size, mesas)
+            Leyenda(vm.pedidosPorMesa.keys.count { it in conocidas }, conocidas.size)
+            if (pestanas.size > 1) {
+                TabRow(selectedTabIndex = pestana, modifier = Modifier.padding(top = 8.dp)) {
+                    pestanas.forEachIndexed { i, (nombre, mesas) ->
+                        val ocupadas = mesas.count { it in vm.pedidosPorMesa }
+                        Tab(
+                            selected = i == pestana,
+                            onClick = { vm.zonaElegida = nombre },
+                            text = { Text(if (ocupadas > 0) "$nombre ($ocupadas)" else nombre, fontSize = 16.sp, maxLines = 1) },
+                        )
+                    }
+                }
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(130.dp),
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items((1..mesas).toList(), key = { it }) { numero ->
-                    TarjetaMesa(numero, vm.pedidoDe(numero)) { vm.abrirMesa(numero) }
+                items(pestanas[pestana].second, key = { it }) { mesa ->
+                    TarjetaMesa(mesa, vm.pedidoDe(mesa)) { vm.abrirMesa(mesa) }
                 }
             }
         }
@@ -245,7 +266,7 @@ private fun Leyenda(ocupadas: Int, total: Int) {
 }
 
 @Composable
-private fun TarjetaMesa(numero: Int, pedido: Pedido?, alPulsar: () -> Unit) {
+private fun TarjetaMesa(mesa: String, pedido: Pedido?, alPulsar: () -> Unit) {
     val listo = pedido?.estado == "listo"
     val (fondo, texto) = when {
         pedido == null -> Color.White to FondoOscuro
@@ -261,7 +282,7 @@ private fun TarjetaMesa(numero: Int, pedido: Pedido?, alPulsar: () -> Unit) {
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()) {
             Text("Mesa", fontSize = 14.sp, color = texto.copy(alpha = 0.7f))
-            Text(numero.toString(), fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 36.sp)
+            Text(mesa, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 36.sp, maxLines = 1)
             if (pedido == null) {
                 Text("Libre", fontSize = 14.sp, color = texto.copy(alpha = 0.5f))
             } else {
@@ -287,7 +308,7 @@ private fun TarjetaMesa(numero: Int, pedido: Pedido?, alPulsar: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos: SnackbarHostState) {
+private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avisos: SnackbarHostState) {
     val pedido = vm.pedidoDe(mesa)
     var salirSinEnviar by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -359,7 +380,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
             }
             Box(Modifier.weight(1f)) {
                 if (pestana == 0) CartaRapida(vm, ajustes, Modifier.fillMaxSize())
-                else PanelComanda(vm, ajustes, pedido)
+                else PanelComanda(vm, pedido)
             }
             BarraEnviar(vm)
         }
@@ -385,7 +406,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
         )
         "cerrar" -> DialogoConfirmar(
             titulo = "Cerrar comanda de la mesa $mesa",
-            texto = "PedIA imprimirá el ticket final para el cliente (${euros(pedido.total)}).",
+            texto = "PedIA imprimirá el ticket con todos los artículos (${euros(pedido.total)}). En cocina no sale nada.",
             textoSi = "Cerrar comanda",
             alConfirmar = { confirmar = null; vm.cerrarComanda(pedido) },
             alCancelar = { confirmar = null },
@@ -403,6 +424,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: Int, avisos:
     if (cambiarMesa && pedido != null) {
         DialogoCambiarMesa(
             actual = mesa,
+            zonas = vm.carta?.zonas.orEmpty(),
             ocupadas = vm.pedidosPorMesa.keys,
             alElegir = { nueva -> cambiarMesa = false; vm.cambiarDeMesa(pedido, nueva) },
             alCancelar = { cambiarMesa = false },
@@ -540,13 +562,10 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
 
     detalle?.let { producto ->
         if (producto.esMenu) {
-            FichaProductoKiosco(
+            FichaMenuCamarero(
                 producto = producto,
                 carta = carta,
-                urlFoto = api.urlFoto(producto.fotoPath),
-                icono = iconoCategoria(carta.categorias.firstOrNull { it.id == producto.categoriaId }?.nombre.orEmpty()),
-                conNotaLibre = true,
-                alAnadir = { linea -> vm.anadir(linea); detalle = null },
+                alGuardar = { linea -> vm.anadir(linea); detalle = null },
                 alCerrar = { detalle = null },
             )
         } else {
@@ -563,7 +582,7 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
 }
 
 @Composable
-private fun PanelComanda(vm: CamareroVM, ajustes: Ajustes, pedido: Pedido?) {
+private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
     var itemElegido by remember { mutableStateOf<ItemPedido?>(null) }
     var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
     var itemEditado by remember { mutableStateOf<ItemPedido?>(null) }
@@ -610,15 +629,12 @@ private fun PanelComanda(vm: CamareroVM, ajustes: Ajustes, pedido: Pedido?) {
         val carta = vm.carta
         if (linea.producto.esMenu && carta != null) {
             // Un menú se edita en su ficha: se puede cambiar lo elegido (la bebida, las patatas...), no solo el texto.
-            FichaProductoKiosco(
+            FichaMenuCamarero(
                 producto = linea.producto,
                 carta = carta,
-                urlFoto = ajustes.api().urlFoto(linea.producto.fotoPath),
-                icono = iconoCategoria(carta.categorias.firstOrNull { it.id == linea.producto.categoriaId }?.nombre.orEmpty()),
                 linea = linea,
-                conNotaLibre = true,
                 alGuardarSoloUna = { vm.editarLinea(linea.clave, it, soloUna = true); lineaEditada = null },
-                alAnadir = { vm.editarLinea(linea.clave, it, soloUna = false); lineaEditada = null },
+                alGuardar = { vm.editarLinea(linea.clave, it, soloUna = false); lineaEditada = null },
                 alCerrar = { lineaEditada = null },
             )
         } else {
@@ -774,29 +790,33 @@ private fun BarraEnviar(vm: CamareroVM) {
     }
 }
 
+/** Pasar el pedido a otra mesa: se toca una de las mesas libres de cada zona. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DialogoCambiarMesa(actual: Int, ocupadas: Set<Int>, alElegir: (Int) -> Unit, alCancelar: () -> Unit) {
-    var texto by remember { mutableStateOf("") }
-    val numero = texto.toIntOrNull()
-    val valida = numero != null && numero > 0 && numero != actual && numero !in ocupadas
+private fun DialogoCambiarMesa(actual: String, zonas: List<ZonaMesas>, ocupadas: Set<String>, alElegir: (String) -> Unit, alCancelar: () -> Unit) {
     AlertDialog(
         onDismissRequest = alCancelar,
         title = { Text("Pasar la mesa $actual a…") },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = texto,
-                    onValueChange = { texto = it.filter(Char::isDigit).take(3) },
-                    label = { Text("Número de mesa") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                if (numero != null && numero in ocupadas && numero != actual) {
-                    Text("La mesa $numero está ocupada.", color = Rojo, textAlign = TextAlign.Start)
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                zonas.forEach { zona ->
+                    val libres = zona.mesas.filter { it != actual && it !in ocupadas }
+                    Text(zona.nombre, fontWeight = FontWeight.Bold)
+                    if (libres.isEmpty()) {
+                        Text("No hay mesas libres", color = Color.Gray, fontSize = 14.sp)
+                    } else {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            libres.forEach { mesa ->
+                                OutlinedButton(
+                                    onClick = { alElegir(mesa) },
+                                    contentPadding = PaddingValues(horizontal = 14.dp),
+                                ) { Text(mesa, fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                    }
                 }
             }
         },
-        confirmButton = { Button(enabled = valida, onClick = { numero?.let(alElegir) }) { Text("Cambiar") } },
-        dismissButton = { OutlinedButton(onClick = alCancelar) { Text("Cancelar") } },
+        confirmButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } },
     )
 }

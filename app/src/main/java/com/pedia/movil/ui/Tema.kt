@@ -1,9 +1,19 @@
 package com.pedia.movil.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -22,9 +32,9 @@ val Naranja = Color(0xFFEA580C)
 val NaranjaSuave = Color(0xFFFFEDD5)
 val Rojo = Color(0xFFDC2626)
 
-// Kiosko (estilo autoservicio de comida rápida): fondo crema, tarjetas blancas, acento ámbar.
-val Ambar = Color(0xFFFFB300)
-val AmbarSuave = Color(0xFFFFF4D6)
+// Kiosko (estilo autoservicio de comida rápida): fondo crema, tarjetas blancas, acento azul PedIA.
+val Acento = AzulPedia
+val AcentoSuave = AzulSuave
 val Tinta = Color(0xFF1C1C1E)
 val Crema = Color(0xFFF6F2EA)
 val GrisFoto = Color(0xFFF2F2F2)
@@ -58,11 +68,23 @@ fun TemaPedia(contenido: @Composable () -> Unit) {
     }
 }
 
-/** Ventana de ficha a casi toda la pantalla. Android la abre sin la escala de TemaPedia: aquí se le vuelve a poner. */
+/**
+ * Ventana de ficha a casi toda la pantalla. Android la abre sin la escala de TemaPedia: aquí se le vuelve a
+ * poner. Ocupa la ventana entera y deja el margen de las barras del sistema y del teclado: si no, en un móvil
+ * con botones de navegación lo de abajo de la ficha (el botón de añadir) queda cortado.
+ */
 @Composable
-fun VentanaPedia(alCerrar: () -> Unit, contenido: @Composable () -> Unit) {
+fun VentanaPedia(alCerrar: () -> Unit, alineacion: Alignment = Alignment.Center, contenido: @Composable () -> Unit) {
     val densidad = LocalDensity.current
-    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        CompositionLocalProvider(LocalDensity provides densidad, content = contenido)
+    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        CompositionLocalProvider(LocalDensity provides densidad) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = alCerrar),
+                contentAlignment = alineacion,
+            ) { contenido() }
+        }
     }
 }

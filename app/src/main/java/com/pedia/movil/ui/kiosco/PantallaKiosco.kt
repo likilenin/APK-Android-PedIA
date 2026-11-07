@@ -2,11 +2,13 @@ package com.pedia.movil.ui.kiosco
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pedia.movil.R
 import com.pedia.movil.datos.Ajustes
@@ -75,6 +79,10 @@ fun PantallaKiosco(ajustes: Ajustes, alAbrirAjustes: () -> Unit, alCambiarModo: 
     var sigueAhi by remember { mutableStateOf(false) }
     var pedirPin by remember { mutableStateOf(false) }
     var menuAdmin by remember { mutableStateOf(false) }
+
+    // Al abrir la app (o volver a ella) se pide de nuevo la carta a PedIA. Con un cliente pidiendo no se toca:
+    // se recarga igualmente al empezar el siguiente pedido.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { if (vm.paso == PasoKiosco.BIENVENIDA) vm.recargarCarta() }
 
     // En el kiosko el botón "atrás" no saca de la app: como mucho vuelve a la carta.
     BackHandler {
@@ -188,22 +196,26 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
             val carta = vm.carta
             val movil = esMovil()
             when {
-                carta != null -> {
-                    Text(
-                        "Pide aquí y recoge en el mostrador",
-                        color = Color.White,
-                        fontSize = if (movil) 28.sp else 34.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
+                carta != null -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val arribaLogo = if (movil) 80.dp else 140.dp
+                    val altoLogo = if (movil) 150.dp else 220.dp
+                    val altoBoton = if (movil) 130.dp else 180.dp
+                    val separacion = 28.dp
+                    // Las dos opciones, centradas en la pantalla. En una pantalla tan baja que no caben ahí sin
+                    // tapar el logo, justo debajo de él.
+                    val arribaOpciones = maxOf((maxHeight - altoBoton * 2 - separacion) / 2, arribaLogo + altoLogo + 24.dp)
+                    // Logo del local, algo separado del borde.
+                    Image(
+                        painterResource(R.drawable.logo_local),
+                        contentDescription = "Logo del local",
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = arribaLogo).height(altoLogo),
                     )
-                    Spacer(Modifier.height(40.dp))
-                    // Las dos opciones, quietas, una encima de otra y centradas en el espacio libre.
                     Column(
-                        Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterVertically),
+                        Modifier.fillMaxWidth().padding(top = arribaOpciones),
+                        verticalArrangement = Arrangement.spacedBy(separacion),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(if (movil) 130.dp else 180.dp)
+                        val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(altoBoton)
                         BotonInicio(R.drawable.ic_comer_aqui, "Para tomar aquí", tamano) { vm.empezar(llevar = false) }
                         BotonInicio(R.drawable.ic_para_llevar, "Para llevar", tamano) { vm.empezar(llevar = true) }
                     }

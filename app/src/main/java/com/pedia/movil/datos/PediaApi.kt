@@ -120,9 +120,23 @@ class PediaApi(private val urlBase: String) {
             categorias = activas.filter { it.id in conProductos },
             productos = productos,
             nombreLocal = cfg["local_nombre"]?.takeIf { it.isNotBlank() } ?: "PedIA",
-            mesas = cfg["mesas_cantidad"]?.toIntOrNull()?.takeIf { it > 0 } ?: 20,
+            zonas = zonasDeMesas(cfg),
             ivaGeneral = cfg["iva_porcentaje"]?.replace(',', '.')?.toDoubleOrNull() ?: 10.0,
         )
+    }
+
+    /**
+     * Zonas de mesas de PedIA (Ajustes > mesas de terraza, salón y barra). Una PedIA anterior a las zonas
+     * tiene una sola, "Mesas", numerada 1, 2, 3...
+     */
+    private fun zonasDeMesas(cfg: Map<String, String>): List<ZonaMesas> {
+        fun cantidad(clave: String) = cfg[clave]?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val zonas = listOf(
+            ZonaMesas("Terraza", "T", cantidad("mesas_terraza")),
+            ZonaMesas("Salón", "S", cantidad("mesas_salon")),
+            ZonaMesas("Barra", "B", cantidad("mesas_barra")),
+        ).filter { it.cantidad > 0 }
+        return zonas.ifEmpty { listOf(ZonaMesas("Mesas", "", cfg["mesas_cantidad"]?.toIntOrNull()?.takeIf { it > 0 } ?: 20)) }
     }
 
     suspend fun pedido(id: Long): Pedido = json.decodeFromString(peticion("GET", "/api/pedidos/$id"))
@@ -182,7 +196,7 @@ class PediaApi(private val urlBase: String) {
      */
     suspend fun crearPedido(
         tipo: String,
-        mesa: Int?,
+        mesa: String?,
         notas: String?,
         lineas: List<LineaCarrito>,
         origen: String,
@@ -194,7 +208,7 @@ class PediaApi(private val urlBase: String) {
             put("origen", origen)
             if (pagoPrevisto != null) put("pago_previsto", pagoPrevisto)
             if (retenerCocina) put("retener_cocina", true)
-            if (mesa != null) put("mesa_numero", mesa.toString())
+            if (mesa != null) put("mesa_numero", mesa)
             if (!notas.isNullOrBlank()) put("notas", notas)
             putJsonArray("items") { lineas.forEach { add(lineaJson(it)) } }
         }
@@ -217,9 +231,9 @@ class PediaApi(private val urlBase: String) {
     suspend fun eliminarItem(pedidoId: Long, itemId: Long): Pedido =
         json.decodeFromString(peticion("DELETE", "/api/pedidos/$pedidoId/items/$itemId"))
 
-    suspend fun cambiarMesa(pedidoId: Long, mesa: Int): Pedido =
+    suspend fun cambiarMesa(pedidoId: Long, mesa: String): Pedido =
         json.decodeFromString(
-            peticion("PATCH", "/api/pedidos/$pedidoId/mesa", buildJsonObject { put("mesa_numero", mesa.toString()) })
+            peticion("PATCH", "/api/pedidos/$pedidoId/mesa", buildJsonObject { put("mesa_numero", mesa) })
         )
 
     /** Cobro en efectivo confirmado a mano (lo mismo que "Abrir caja" en PedIA). */
@@ -229,13 +243,16 @@ class PediaApi(private val urlBase: String) {
     suspend fun liberarMesa(pedidoId: Long): Pedido =
         json.decodeFromString(peticion("POST", "/api/pedidos/$pedidoId/liberar-mesa"))
 
-    /** El camarero cierra la comanda: PedIA imprime el ticket final para el cliente. */
+    /**
+     * El camarero cierra la comanda: PedIA imprime la comanda principal con todos los artículos, lo mismo que
+     * su botón "Imprimir comanda" (en cocina no sale nada). PedIA contesta bien aunque falle la impresora: el
+     * resultado queda anotado en el pedido.
+     */
     suspend fun cerrarComanda(pedidoId: Long) {
-        try {
-            peticion("POST", "/api/pedidos/$pedidoId/cerrar-comanda")
-        } catch (e: ErrorPedia) {
-            if (e.codigoHttp == 404) throw ErrorPedia("PedIA no ha reconocido «Cerrar comanda»: hay que actualizar PedIA en el ordenador.", 404)
-            throw e
+        peticion("POST", "/api/pedidos/$pedidoId/reimprimir", buildJsonObject { put("solo_principal", true) })
+        val impresion = pedido(pedidoId).impresion
+        if (impresion?.estado == "error") {
+            throw ErrorPedia("No se ha impreso el ticket en PedIA: ${impresion.ultimoError ?: "revisa la impresora"}")
         }
     }
 

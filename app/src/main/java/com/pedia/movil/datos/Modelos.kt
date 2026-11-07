@@ -76,6 +76,7 @@ data class Pedido(
     @SerialName("created_at") val creadoEn: String = "",
     /** 1 si PedIA tiene la comanda retenida hasta que se cobre. */
     @SerialName("cocina_retenida") val cocinaRetenida: Int = 0,
+    val impresion: ImpresionPedido? = null,
     val items: List<ItemPedido> = emptyList(),
 ) {
     val pagado get() = estadoPago == "pagado"
@@ -96,12 +97,21 @@ data class EntradaConfig(
     val valor: String? = null,
 )
 
+/** Una zona del local (Terraza, Salón, Barra) con sus mesas: [prefijo] y número ("T1", "T2"...). */
+data class ZonaMesas(val nombre: String, val prefijo: String, val cantidad: Int) {
+    val mesas get() = (1..cantidad).map { "$prefijo$it" }
+}
+
+/** Código de una mesa tal como lo guarda PedIA: sin espacios y en mayúsculas ("t 3" → "T3"). */
+fun codigoMesa(texto: String?): String? = texto?.filterNot { it.isWhitespace() }?.uppercase()?.ifEmpty { null }
+
 /** Carta lista para mostrar: solo categorías activas con productos, en el orden de PedIA. */
 data class Carta(
     val categorias: List<Categoria>,
     val productos: List<Producto>,
     val nombreLocal: String,
-    val mesas: Int,
+    /** Zonas del local con sus mesas, en el orden en que se enseñan. */
+    val zonas: List<ZonaMesas>,
     /** IVA general de PedIA (%), el que se usa en el ticket para los productos sin IVA propio. */
     val ivaGeneral: Double = 10.0,
 ) {
@@ -118,6 +128,13 @@ data class Carta(
         return producto?.opciones.orEmpty()
     }
 }
+
+/** Cómo fue la última impresión del ticket del pedido en la impresora de PedIA. */
+@Serializable
+data class ImpresionPedido(
+    val estado: String? = null,
+    @SerialName("ultimo_error") val ultimoError: String? = null,
+)
 
 /** Una línea del pedido que se está preparando en la tablet (aún sin enviar a PedIA). */
 data class LineaCarrito(

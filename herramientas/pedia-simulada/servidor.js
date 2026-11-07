@@ -58,7 +58,11 @@ const productos = [
 for (const p of productos) if (!p.grupos) p.grupos = [];
 const config = [
   { clave: 'local_nombre', valor: 'Burger Pryto', cifrado: false },
-  { clave: 'mesas_cantidad', valor: '12', cifrado: false },
+  // Mesas por zonas, como PedIA: T1..T4 (terraza), S1..S6 (salón) y B1..B3 (barra). mesas_cantidad es la suma.
+  { clave: 'mesas_terraza', valor: '4', cifrado: false },
+  { clave: 'mesas_salon', valor: '6', cifrado: false },
+  { clave: 'mesas_barra', valor: '3', cifrado: false },
+  { clave: 'mesas_cantidad', valor: '13', cifrado: false },
   { clave: 'iva_porcentaje', valor: '10', cifrado: false },
 ];
 
@@ -139,6 +143,14 @@ const servidor = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(ruta === '/pago/ok' ? '<h1>Pago realizado</h1>' : '<h1>Pago no completado</h1>');
       }
+      // Para probar cambios de ajustes en PedIA (p. ej. las mesas de una zona):
+      //   curl -X POST http://localhost:4100/simular-config -d '{"clave":"mesas_barra","valor":"5"}'
+      if (ruta === '/simular-config' && req.method === 'POST') {
+        const c = config.find((x) => x.clave === body.clave);
+        if (c) c.valor = String(body.valor); else config.push({ clave: body.clave, valor: String(body.valor), cifrado: false });
+        log('>>> AJUSTE CAMBIADO', body.clave, '=', body.valor);
+        return responder(res, 200, { ok: true });
+      }
       // Para probar el pago con el móvil: curl -X POST http://localhost:4100/simular-pago/ID
       if ((mp = ruta.match(/^\/simular-pago\/(\d+)$/))) {
         const p = pedidos.find((x) => x.id === Number(mp[1]));
@@ -203,8 +215,13 @@ const servidor = http.createServer((req, res) => {
         if (resto === '/marcar-pagado') { p.estado_pago = 'pagado'; return responder(res, 200, p); }
         if (resto === '/liberar-mesa') { p.mesa_numero = null; return responder(res, 200, p); }
         if (resto === '/mesa') { p.mesa_numero = String(body.mesa_numero); return responder(res, 200, p); }
-        if (resto === '/cerrar-comanda') { log('>>> COMANDA CERRADA: TICKET FINAL', p.id); return responder(res, 200, completar(p)); }
-        if (resto === '/reimprimir') { log('>>> REIMPRIMIR', p.id); return responder(res, 200, { ok: true }); }
+        if (resto === '/reimprimir') {
+          // Con un archivo "impresora-rota" en esta carpeta, la impresora simulada falla (PedIA contesta bien y lo anota en el pedido).
+          const rota = fs.existsSync(path.join(CARPETA, 'impresora-rota'));
+          p.impresion = rota ? { estado: 'error', ultimo_error: 'Impresora desconectada' } : { estado: 'enviado', ultimo_error: null };
+          log(body.solo_principal ? '>>> TICKET PRINCIPAL (en cocina nada)' : '>>> REIMPRIMIR CON COCINAS', p.id, rota ? 'FALLA LA IMPRESORA' : '');
+          return responder(res, 200, { ok: true });
+        }
       }
       responder(res, 404, { error: 'ruta no simulada' });
     } catch (err) {

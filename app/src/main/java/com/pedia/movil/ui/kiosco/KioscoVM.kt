@@ -78,10 +78,6 @@ class KioscoVM(private val ajustes: Ajustes, private val contexto: Context) : Vi
 
     private val api get() = ajustes.api()
 
-    init {
-        recargarCarta()
-    }
-
     // La carta se vuelve a pedir a PedIA con cada cliente: así un producto que se
     // marca como agotado en el TPV desaparece del kiosko enseguida.
     fun recargarCarta() {
