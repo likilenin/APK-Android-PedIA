@@ -27,6 +27,12 @@ data class Producto(
     val opciones: List<String> = emptyList(),
     /** Menús: grupos de opciones que hay que elegir al pedirlo ("Bebida", "Patatas"...). */
     val grupos: List<GrupoProducto> = emptyList(),
+    /** Lo que lleva (se puede quitar al pedirlo: "sin queso"). */
+    val ingredientes: List<String> = emptyList(),
+    /** Claves de los alérgenos que contiene (los 14 de la UE). */
+    val alergenos: List<String> = emptyList(),
+    /** 1 = el dueño ha revisado los alérgenos de este producto; 0 = lo cargado es, como mucho, un borrador. */
+    @SerialName("alergenos_revisados") val alergenosRevisados: Int = 0,
 ) {
     val estaDisponible get() = disponible == 1
     val esMenu get() = grupos.isNotEmpty()
@@ -121,11 +127,13 @@ data class Carta(
      * Ingredientes que se pueden quitar a una opción de menú ("Sin queso"...): los del producto de la
      * carta enlazado o, si no está enlazado, los del producto que se llama igual.
      */
-    fun ingredientesDe(opcion: OpcionGrupo): List<String> {
+    fun ingredientesDe(opcion: OpcionGrupo): List<String> = productoDe(opcion)?.opciones.orEmpty()
+
+    /** Producto de la carta que corresponde a una opción de menú: el enlazado en PedIA o el que se llama igual. */
+    fun productoDe(opcion: OpcionGrupo): Producto? {
         val nombre = opcion.texto.trim().lowercase()
-        val producto = productos.firstOrNull { it.id == opcion.productoId }
+        return productos.firstOrNull { it.id == opcion.productoId }
             ?: productos.firstOrNull { it.nombre.trim().lowercase() == nombre }
-        return producto?.opciones.orEmpty()
     }
 }
 

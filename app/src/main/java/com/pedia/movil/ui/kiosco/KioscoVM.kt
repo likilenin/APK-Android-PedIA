@@ -109,8 +109,23 @@ class KioscoVM(private val ajustes: Ajustes, private val contexto: Context) : Vi
 
     fun anadir(linea: LineaCarrito) {
         lineas.anadir(linea)
-        avisoAnadido = "Añadido a tu pedido: " + (if (linea.cantidad > 1) "${linea.cantidad} × " else "") + linea.producto.nombre
+        avisoAnadido = (if (linea.cantidad > 1) "${linea.cantidad} × " else "") + linea.producto.nombre + " agregado a tu pedido"
         avisoId++
+    }
+
+    /** Destello con el logo del local al terminar de elegir un producto (como en los autoservicios). */
+    var destello by mutableIntStateOf(0)
+        private set
+
+    /** Lo elegido en el asistente de un producto: la línea principal y lo añadido en "Completa tu menú". */
+    fun anadirDesdeAsistente(principal: LineaCarrito, extras: List<LineaCarrito>) {
+        anadir(principal)
+        extras.forEach { lineas.anadir(it) }
+        destello++
+    }
+
+    fun cambiarLugar(llevar: Boolean) {
+        paraLlevar = llevar
     }
 
     fun editarLinea(clave: String, nueva: LineaCarrito) = lineas.sustituir(clave, nueva)
@@ -122,11 +137,26 @@ class KioscoVM(private val ajustes: Ajustes, private val contexto: Context) : Vi
     fun sugerencias(): List<Producto> {
         val c = carta ?: return emptyList()
         val enPedido = lineas.map { it.producto.id }.toSet()
-        val claves = listOf("bebida", "refresco", "postre", "helado", "patata", "complement", "acompan")
-        val preferidas = c.categorias.filter { cat -> claves.any { it in normalizar(cat.nombre) } }.map { it.id }.toSet()
+        val preferidas = categoriasDeComplementos(c)
         return c.productos
             .filter { it.estaDisponible && it.id !in enPedido }
             .sortedBy { if (it.categoriaId in preferidas) 0 else 1 }
+    }
+
+    /**
+     * "Completa tu menú" (último paso del asistente de un producto): bebidas, postres y complementos que se
+     * piden sin elegir nada y que no están ya en el pedido.
+     */
+    fun complementos(producto: Producto): List<Producto> {
+        val c = carta ?: return emptyList()
+        val fuera = lineas.map { it.producto.id }.toSet() + producto.id
+        val preferidas = categoriasDeComplementos(c)
+        return c.productos.filter { it.estaDisponible && it.id !in fuera && it.categoriaId in preferidas && !it.tieneAsistente }.take(9)
+    }
+
+    private fun categoriasDeComplementos(c: Carta): Set<Long> {
+        val claves = listOf("bebida", "refresco", "postre", "helado", "patata", "complement", "acompan")
+        return c.categorias.filter { cat -> claves.any { it in normalizar(cat.nombre) } }.map { it.id }.toSet()
     }
 
     fun cambiarCantidad(clave: String, delta: Int) {

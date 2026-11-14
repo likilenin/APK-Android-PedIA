@@ -1,6 +1,21 @@
 package com.pedia.movil.ui.kiosco
 
 import androidx.activity.compose.BackHandler
+import com.pedia.movil.ui.Tinta
+import com.pedia.movil.ui.GrisTexto
+import com.pedia.movil.ui.AcentoSuave
+import com.pedia.movil.ui.Acento
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -116,15 +131,24 @@ fun PantallaKiosco(ajustes: Ajustes, alAbrirAjustes: () -> Unit, alCambiarModo: 
                 }
             },
     ) {
-        when (vm.paso) {
-            PasoKiosco.BIENVENIDA -> Bienvenida(vm, alAbrirMenu = { pedirPin = true })
-            PasoKiosco.CARTA -> CartaKiosco(vm, ajustes)
-            PasoKiosco.RESUMEN, PasoKiosco.ENVIANDO -> ResumenKiosco(vm, ajustes)
-            PasoKiosco.PAGO -> ElegirPago(vm)
-            PasoKiosco.PAGO_TARJETA -> PagoConTarjeta(vm)
-            PasoKiosco.PAGO_MOVIL -> PagoConMovil(vm)
-            PasoKiosco.CONFIRMADO -> Confirmado(vm)
+        // De una pantalla a otra, un fundido rápido (como en los autoservicios).
+        AnimatedContent(
+            targetState = if (vm.paso == PasoKiosco.ENVIANDO) PasoKiosco.RESUMEN else vm.paso,
+            transitionSpec = { fadeIn(tween(260, delayMillis = 60)) togetherWith fadeOut(tween(160)) },
+            label = "pasoKiosco",
+        ) { paso ->
+            when (paso) {
+                PasoKiosco.BIENVENIDA -> Bienvenida(vm, alAbrirMenu = { pedirPin = true })
+                PasoKiosco.CARTA -> CartaKiosco(vm, ajustes)
+                PasoKiosco.RESUMEN, PasoKiosco.ENVIANDO -> ResumenKiosco(vm, ajustes)
+                PasoKiosco.PAGO -> ElegirPago(vm)
+                PasoKiosco.PAGO_TARJETA -> PagoConTarjeta(vm)
+                PasoKiosco.PAGO_MOVIL -> PagoConMovil(vm)
+                PasoKiosco.CONFIRMADO -> Confirmado(vm)
+            }
         }
+        Procesando(visible = vm.paso == PasoKiosco.ENVIANDO || (vm.paso == PasoKiosco.PAGO && vm.trabajando))
+        Destello(vm.destello)
     }
 
     if (sigueAhi) {
@@ -279,11 +303,53 @@ private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifi
     }
 }
 
-// ---------- Confirmado ----------
+// ---------- Transiciones ----------
+
+/** Al terminar de elegir un producto, el logo del local llena la pantalla un momento y se desvanece. */
+@Composable
+private fun Destello(contador: Int) {
+    val inicial = remember { contador }
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(contador) {
+        if (contador != inicial) {
+            visible = true
+            delay(650)
+            visible = false
+        }
+    }
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(140)), exit = fadeOut(tween(420))) {
+        Box(Modifier.fillMaxSize().background(Color.White), contentAlignment = Alignment.Center) {
+            Image(painterResource(R.drawable.logo_local), contentDescription = null, modifier = Modifier.height(180.dp))
+        }
+    }
+}
+
+/** Mientras PedIA crea el pedido o prepara el cobro: pantalla de espera con el logo. */
+@Composable
+private fun Procesando(visible: Boolean) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(200)), exit = fadeOut(tween(250))) {
+        Column(
+            Modifier.fillMaxSize().background(Color.White),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Image(painterResource(R.drawable.logo_local), contentDescription = null, modifier = Modifier.height(140.dp))
+            Spacer(Modifier.height(28.dp))
+            Text("Procesando tu pedido", fontSize = 30.sp, fontWeight = FontWeight.Black, color = Tinta)
+            Spacer(Modifier.height(8.dp))
+            Text("Un momento, por favor", fontSize = 19.sp, color = GrisTexto)
+            Spacer(Modifier.height(28.dp))
+            CircularProgressIndicator(color = Acento, strokeWidth = 4.dp, modifier = Modifier.size(52.dp))
+        }
+    }
+}
+
+// ---------- Pedido realizado ----------
 
 @Composable
 private fun Confirmado(vm: KioscoVM) {
     val pedido = vm.pedido ?: return
+    val movil = esMovil()
     var quedan by remember { mutableIntStateOf(SEGUNDOS_PANTALLA_GRACIAS) }
     LaunchedEffect(pedido.id) {
         while (quedan > 0) {
@@ -292,55 +358,109 @@ private fun Confirmado(vm: KioscoVM) {
         }
         vm.terminar()
     }
-    Box(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF065F46), Color(0xFF16A34A)))),
-        contentAlignment = Alignment.Center,
+    // Los tres pasos que le quedan al cliente, como en los autoservicios.
+    val pasos = if (pedido.pagado) {
+        listOf(
+            R.drawable.ic_pago_tarjeta to "Pedido pagado",
+            R.drawable.ic_comer_aqui to "Espera a oír tu número",
+            R.drawable.ic_cat_hamburguesa to "¡Lo estamos preparando!",
+        )
+    } else {
+        listOf(
+            R.drawable.ic_pago_caja to "Pasa por el mostrador",
+            R.drawable.ic_pago_tarjeta to "Paga tu pedido en el mostrador",
+            R.drawable.ic_cat_hamburguesa to "¡Empezamos a prepararlo!",
+        )
+    }
+    Column(
+        Modifier.fillMaxSize().background(Color.White).padding(horizontal = 28.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text("¡Gracias!", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(8.dp))
-            Text("Tu número de pedido es", color = Color.White.copy(alpha = 0.85f), fontSize = 26.sp)
-            Text(
-                (pedido.numeroDia ?: pedido.id).toString(),
-                color = Color.White,
-                fontSize = 180.sp,
-                fontWeight = FontWeight.Black,
-                lineHeight = 190.sp,
-            )
-            Text(
-                "${if (vm.paraLlevar) "Para llevar" else "Para tomar aquí"} · ${euros(pedido.total)}",
-                color = Color.White,
-                fontSize = 24.sp,
-            )
-            Spacer(Modifier.height(24.dp))
-            when (vm.impresion) {
-                EstadoImpresion.IMPRIMIENDO -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Imprimiendo tu ticket…", color = Color.White, fontSize = 22.sp)
-                }
-                EstadoImpresion.IMPRESO -> Text("Recoge tu ticket", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                EstadoImpresion.ERROR -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No se ha podido imprimir el ticket. Recuerda tu número.", color = Color.White, fontSize = 20.sp, textAlign = TextAlign.Center)
-                    TextButton(onClick = vm::imprimir) { Text("Reintentar impresión", color = Color.White, fontSize = 18.sp) }
-                }
-                EstadoImpresion.SIN_IMPRESORA -> Unit
+        Image(painterResource(R.drawable.logo_local), contentDescription = null, modifier = Modifier.height(if (movil) 90.dp else 120.dp))
+        Spacer(Modifier.height(14.dp))
+        Text("¡Pedido realizado!", fontSize = if (movil) 32.sp else 42.sp, fontWeight = FontWeight.Black, color = Tinta)
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.widthIn(max = 640.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            pasos.forEachIndexed { i, (icono, texto) -> PasoFinal(i + 1, icono, texto, Modifier.weight(1f)) }
+        }
+        Spacer(Modifier.height(24.dp))
+        Surface(color = Color.White, shape = RoundedCornerShape(22.dp), border = BorderStroke(2.dp, Color(0xFFE5E7EB))) {
+            Column(Modifier.padding(horizontal = 56.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Número de pedido", fontSize = 20.sp, color = GrisTexto)
+                Text(
+                    (pedido.numeroDia ?: pedido.id).toString(),
+                    fontSize = if (movil) 72.sp else 96.sp,
+                    lineHeight = if (movil) 78.sp else 100.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Acento,
+                )
+                Text("${if (vm.paraLlevar) "Para llevar" else "Para tomar aquí"} · ${euros(pedido.total)}", fontSize = 18.sp, color = Tinta)
             }
-            Spacer(Modifier.height(12.dp))
-            if (pedido.pagado) {
-                Text("✓ Pagado", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
-                Text("Te avisaremos cuando esté listo.", color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp, textAlign = TextAlign.Center)
-            } else {
-                Text("Paga en caja indicando tu número.", color = Color.White.copy(alpha = 0.85f), fontSize = 22.sp, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(22.dp))
+        Recibo(vm.impresion, alReintentar = vm::imprimir)
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = vm::terminar,
+            colors = ButtonDefaults.buttonColors(containerColor = Acento, contentColor = Color.White),
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.heightIn(min = 64.dp),
+            contentPadding = PaddingValues(horizontal = 44.dp),
+        ) { Text("Terminar ($quedan)", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun PasoFinal(numero: Int, @DrawableRes icono: Int, texto: String, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box {
+            Box(Modifier.size(if (esMovil()) 64.dp else 80.dp).clip(CircleShape).background(AcentoSuave), contentAlignment = Alignment.Center) {
+                Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(if (esMovil()) 38.dp else 48.dp))
             }
-            Spacer(Modifier.height(36.dp))
-            Button(
-                onClick = vm::terminar,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF065F46)),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.heightIn(min = 64.dp),
-                contentPadding = PaddingValues(horizontal = 40.dp),
-            ) { Text("Terminar ($quedan)", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(28.dp).clip(CircleShape).background(Acento),
+                contentAlignment = Alignment.Center,
+            ) { Text(numero.toString(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(texto, fontSize = 16.sp, color = Tinta, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** La ranura de la impresora: mientras imprime, una espera; al terminar, el recibo sale hacia abajo. */
+@Composable
+private fun Recibo(estado: EstadoImpresion, alReintentar: () -> Unit) {
+    if (estado == EstadoImpresion.SIN_IMPRESORA) return
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.width(300.dp).height(14.dp).clip(RoundedCornerShape(7.dp)).background(Tinta))
+        when (estado) {
+            EstadoImpresion.IMPRIMIENDO -> Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = Acento, strokeWidth = 3.dp, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Imprimiendo tu recibo…", fontSize = 20.sp, color = Tinta)
+            }
+            EstadoImpresion.IMPRESO -> {
+                val sale = remember { MutableTransitionState(false).apply { targetState = true } }
+                AnimatedVisibility(visibleState = sale, enter = expandVertically(tween(700), expandFrom = Alignment.Top) + fadeIn(tween(300))) {
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp),
+                        shadowElevation = 4.dp,
+                        modifier = Modifier.width(260.dp),
+                    ) {
+                        Column(Modifier.padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(painterResource(R.drawable.ic_pago_caja), contentDescription = null, tint = Tinta, modifier = Modifier.size(40.dp))
+                            Spacer(Modifier.height(6.dp))
+                            Text("Coge tu recibo, gracias", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Tinta)
+                        }
+                    }
+                }
+            }
+            EstadoImpresion.ERROR -> Column(Modifier.padding(top = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No se ha podido imprimir el recibo. Recuerda tu número.", fontSize = 18.sp, color = Tinta, textAlign = TextAlign.Center)
+                TextButton(onClick = alReintentar) { Text("Reintentar impresión", fontSize = 18.sp, color = Acento) }
+            }
+            EstadoImpresion.SIN_IMPRESORA -> Unit
         }
     }
 }

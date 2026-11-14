@@ -23,10 +23,10 @@ const P = (categoria_id, nombre, precio, extra = {}) => ({
   id: pid++, categoria_id, nombre, precio, descripcion: null, foto_path: null, disponible: 1, orden: 0, opciones: [], ...extra,
 });
 const productos = [
-  P(1, 'Hamburguesa clásica', 950, { descripcion: 'Ternera, lechuga, tomate y salsa de la casa', opciones: ['sin queso', 'sin cebolla', 'sin pepinillo', 'poco hecha'] }),
+  P(1, 'Hamburguesa clásica', 950, { descripcion: 'Ternera, lechuga, tomate y salsa de la casa', opciones: ['sin queso', 'sin cebolla', 'sin pepinillo', 'poco hecha'], ingredientes: ['Ternera', 'Lechuga', 'Tomate', 'Salsa de la casa', 'Queso'], alergenos: ['gluten', 'huevo', 'lacteos', 'sesamo'], alergenos_revisados: 1 }),
   P(1, 'Hamburguesa doble con bacon', 1290, { opciones: ['sin queso', 'sin bacon'] }),
   P(1, 'Hamburguesa vegetal', 1050),
-  P(2, 'Pizza margarita', 1100),
+  P(2, 'Pizza margarita', 1100, { ingredientes: ['Tomate', 'Mozzarella'], alergenos: ['gluten', 'lacteos'] }),
   P(2, 'Pizza barbacoa', 1350, { opciones: ['sin cebolla', 'extra de queso'] }),
   P(2, 'Pizza cuatro quesos', 1300, { disponible: 0 }),
   P(3, 'Coca-Cola', 250),

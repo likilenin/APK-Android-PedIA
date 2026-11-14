@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,12 +38,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pedia.movil.datos.Carta
 import com.pedia.movil.datos.LineaCarrito
 import com.pedia.movil.datos.Producto
+import com.pedia.movil.datos.infoAlergenos
+import com.pedia.movil.datos.ingredientesQuitables
+import com.pedia.movil.datos.textoSin
+import com.pedia.movil.ui.DialogoAlergenos
 import com.pedia.movil.ui.AzulPedia
 import com.pedia.movil.ui.FondoOscuro
 import com.pedia.movil.ui.Rojo
@@ -67,7 +73,10 @@ fun FichaMenuCamarero(
     alCerrar: () -> Unit,
 ) {
     var cantidad by remember { mutableIntStateOf(linea?.cantidad ?: 1) }
+    // Lo marcado en "Cambios": modificaciones del producto y los "sin ..." de sus propios ingredientes quitados.
     var elegidas by remember { mutableStateOf(linea?.opcionesMarcadas.orEmpty()) }
+    var verAlergenos by remember { mutableStateOf(false) }
+    val quitables = producto.ingredientesQuitables
     // Opciones elegidas en cada grupo (id del grupo → ids de las opciones).
     var menu by remember {
         mutableStateOf(
@@ -81,7 +90,8 @@ fun FichaMenuCamarero(
     val precioUnidad = producto.precio + producto.grupos.flatMap { it.opciones }.filter { it.id in seleccionadas }.sumOf { it.suplemento }
 
     fun lineaElegida(unidades: Int): LineaCarrito {
-        val notas = producto.opciones.filter { it in elegidas } + notasDeIngredientes(producto, seleccionadas, quitados) +
+        val notas = producto.opciones.filter { it in elegidas } + quitables.map(::textoSin).filter { it in elegidas } +
+            notasDeIngredientes(producto, seleccionadas, quitados) +
             listOfNotNull(notaLibre.trim().ifBlank { null })
         return LineaCarrito(
             producto,
@@ -111,6 +121,7 @@ fun FichaMenuCamarero(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = { verAlergenos = true }) { Text("Alérgenos", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                     IconButton(onClick = alCerrar) { Icon(Icons.Filled.Clear, "Cerrar") }
                 }
                 HorizontalDivider()
@@ -118,6 +129,30 @@ fun FichaMenuCamarero(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (quitables.isNotEmpty() || producto.opciones.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Cambios", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FondoOscuro)
+                            if (quitables.isNotEmpty()) {
+                                Text("Quitar ingredientes de ${producto.nombre}", fontSize = 13.sp, color = Color.Gray)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    quitables.forEach { ing ->
+                                        val sin = textoSin(ing)
+                                        OpcionRapida(ing, null, sin in elegidas, true, tachada = true) {
+                                            elegidas = if (sin in elegidas) elegidas - sin else elegidas + sin
+                                        }
+                                    }
+                                }
+                            }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                producto.opciones.forEach { opcion ->
+                                    val marcada = opcion in elegidas
+                                    OpcionRapida(opcion, null, marcada, true) {
+                                        elegidas = if (marcada) elegidas - opcion else elegidas + opcion
+                                    }
+                                }
+                            }
+                        }
+                    }
                     producto.grupos.forEach { grupo ->
                         val actuales = menu[grupo.id].orEmpty()
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -171,19 +206,6 @@ fun FichaMenuCamarero(
                             }
                         }
                     }
-                    if (producto.opciones.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Cambios", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FondoOscuro)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                producto.opciones.forEach { opcion ->
-                                    val marcada = opcion in elegidas
-                                    OpcionRapida(opcion, null, marcada, true) {
-                                        elegidas = if (marcada) elegidas - opcion else elegidas + opcion
-                                    }
-                                }
-                            }
-                        }
-                    }
                     OutlinedTextField(
                         value = notaLibre,
                         onValueChange = { notaLibre = it.take(200) },
@@ -231,11 +253,14 @@ fun FichaMenuCamarero(
             }
         }
     }
+    if (verAlergenos) {
+        DialogoAlergenos(producto.nombre, infoAlergenos(producto, carta, seleccionadas)) { verAlergenos = false }
+    }
 }
 
 /** Una opción de un toque: azul cuando está elegida. */
 @Composable
-private fun OpcionRapida(texto: String, extra: String?, marcada: Boolean, habilitada: Boolean, alPulsar: () -> Unit) {
+private fun OpcionRapida(texto: String, extra: String?, marcada: Boolean, habilitada: Boolean, tachada: Boolean = false, alPulsar: () -> Unit) {
     val color = when {
         marcada -> Color.White
         habilitada -> FondoOscuro
@@ -253,7 +278,13 @@ private fun OpcionRapida(texto: String, extra: String?, marcada: Boolean, habili
         border = BorderStroke(1.dp, if (marcada) AzulPedia else Color(0xFFCBD5E1)),
     ) {
         Row(Modifier.heightIn(min = 44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(texto, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color)
+            Text(
+                texto,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = color,
+                textDecoration = if (tachada && marcada) TextDecoration.LineThrough else null,
+            )
             if (extra != null) {
                 Spacer(Modifier.width(6.dp))
                 Text(extra, fontSize = 13.sp, color = color.copy(alpha = 0.8f))

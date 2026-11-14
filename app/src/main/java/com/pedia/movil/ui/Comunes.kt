@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,12 +50,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.pedia.movil.datos.Ajustes
+import com.pedia.movil.datos.Carta
+import com.pedia.movil.datos.InfoAlergenos
+import com.pedia.movil.datos.infoAlergenos
+import com.pedia.movil.datos.ingredientesQuitables
+import com.pedia.movil.datos.textoSin
 import com.pedia.movil.datos.PIN_INICIAL
 import com.pedia.movil.datos.Producto
 
@@ -191,10 +198,15 @@ fun DialogoProducto(
     permitirNota: Boolean,
     alAnadir: (cantidad: Int, notas: String) -> Unit,
     alCerrar: () -> Unit,
+    /** Con la carta se puede ver lo que llevan los menús elegidos; sin ella, solo el propio producto. */
+    carta: Carta? = null,
 ) {
     var cantidad by remember { mutableIntStateOf(1) }
+    // Lo marcado: modificaciones del producto ("poco hecha") y los "sin ..." de los ingredientes quitados.
     var elegidas by remember { mutableStateOf(setOf<String>()) }
     var nota by remember { mutableStateOf("") }
+    var verAlergenos by remember { mutableStateOf(false) }
+    val quitables = producto.ingredientesQuitables
 
     VentanaPedia(alCerrar) {
         Card(
@@ -213,6 +225,16 @@ fun DialogoProducto(
                         Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.secondary)
                     }
                     Text(euros(producto.precio), style = MaterialTheme.typography.titleLarge, color = AzulPedia, fontWeight = FontWeight.Bold)
+                    if (quitables.isNotEmpty()) {
+                        QuitarIngredientes(
+                            ingredientes = quitables,
+                            quitado = { textoSin(it) in elegidas },
+                            alPulsar = { ing ->
+                                val sin = textoSin(ing)
+                                elegidas = if (sin in elegidas) elegidas - sin else elegidas + sin
+                            },
+                        )
+                    }
                     if (producto.opciones.isNotEmpty()) {
                         Text("Personaliza", style = MaterialTheme.typography.titleMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -224,6 +246,9 @@ fun DialogoProducto(
                                 )
                             }
                         }
+                    }
+                    OutlinedButton(onClick = { verAlergenos = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text("Ver alérgenos e ingredientes", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     if (permitirNota) {
                         OutlinedTextField(
@@ -245,8 +270,11 @@ fun DialogoProducto(
                     Button(
                         onClick = {
                             // Mismo formato que PedIA: opciones y nota en un texto separado por comas.
-                            val notas = (producto.opciones.filter { it in elegidas } + listOfNotNull(nota.trim().ifBlank { null }))
-                                .joinToString(", ")
+                            val notas = (
+                                producto.opciones.filter { it in elegidas } +
+                                    quitables.map(::textoSin).filter { it in elegidas } +
+                                    listOfNotNull(nota.trim().ifBlank { null })
+                                ).joinToString(", ")
                             alAnadir(cantidad, notas)
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
@@ -258,6 +286,87 @@ fun DialogoProducto(
             }
         }
     }
+    if (verAlergenos) DialogoAlergenos(producto.nombre, infoAlergenos(producto, carta, emptyList())) { verAlergenos = false }
+}
+
+/**
+ * Ingredientes que se pueden quitar al pedir (el camarero toca los que el cliente no quiere): el que se quita
+ * sale tachado y se anota como "sin <ingrediente>".
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun QuitarIngredientes(ingredientes: List<String>, quitado: (String) -> Boolean, alPulsar: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Quitar ingredientes", style = MaterialTheme.typography.titleMedium)
+        Text("Toca lo que el cliente no quiera", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ingredientes.forEach { ing ->
+                val fuera = quitado(ing)
+                FilterChip(
+                    selected = fuera,
+                    onClick = { alPulsar(ing) },
+                    label = {
+                        Text(
+                            ing,
+                            fontSize = 15.sp,
+                            textDecoration = if (fuera) TextDecoration.LineThrough else null,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        )
+                    },
+                    leadingIcon = if (fuera) ({ Text("✕", fontSize = 13.sp, color = Rojo) }) else null,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Qué lleva un producto: ingredientes y los 14 alérgenos de la UE. Si el dueño no ha revisado los alérgenos en
+ * PedIA, se avisa: lo cargado puede estar incompleto y ante una alergia hay que confirmarlo con cocina.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DialogoAlergenos(titulo: String, info: InfoAlergenos, alCerrar: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        title = { Text("Alérgenos · $titulo") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                info.partes.forEach { parte ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (info.partes.size > 1) Text(parte.nombre, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        if (parte.ingredientes.isNotEmpty()) {
+                            Text("Lleva: " + parte.ingredientes.joinToString(", "), fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
+                        }
+                        if (parte.alergenos.isEmpty()) {
+                            Text("No tiene alérgenos anotados.", fontSize = 15.sp)
+                        } else {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                parte.alergenos.forEach { a ->
+                                    Surface(color = NaranjaSuave, shape = RoundedCornerShape(50)) {
+                                        Text(
+                                            "${a.icono} ${a.nombre}",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (info.sinRevisar) {
+                    Text(
+                        "Alérgenos sin revisar por el dueño en PedIA: pueden estar incompletos. Ante una alergia, confirma con cocina.",
+                        fontSize = 14.sp,
+                        color = Naranja,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = alCerrar) { Text("Cerrar") } },
+    )
 }
 
 /** Etiqueta pequeña de color (estado de un pedido, "Pagada"...). */

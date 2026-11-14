@@ -91,6 +91,12 @@ import com.pedia.movil.datos.ItemPedido
 import com.pedia.movil.datos.LineaCarrito
 import com.pedia.movil.datos.Pedido
 import com.pedia.movil.datos.Producto
+import com.pedia.movil.datos.InfoAlergenos
+import com.pedia.movil.datos.infoAlergenos
+import com.pedia.movil.datos.ingredientesQuitables
+import com.pedia.movil.datos.textoSin
+import com.pedia.movil.ui.DialogoAlergenos
+import com.pedia.movil.ui.QuitarIngredientes
 import com.pedia.movil.datos.ZonaMesas
 import com.pedia.movil.ui.AvisoError
 import com.pedia.movil.ui.AzulPedia
@@ -576,6 +582,7 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
                 permitirNota = true,
                 alAnadir = { cantidad, notas -> vm.anadir(producto, cantidad, notas); detalle = null },
                 alCerrar = { detalle = null },
+                carta = carta,
             )
         }
     }
@@ -642,6 +649,8 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
                 nombre = linea.producto.nombre,
                 notasIniciales = linea.notas,
                 opciones = linea.producto.opciones,
+                ingredientes = linea.producto.ingredientesQuitables,
+                alergenos = infoAlergenos(linea.producto, carta, emptyList()),
                 unidades = linea.cantidad,
                 aviso = null,
                 alGuardar = { notas, soloUna -> vm.editarNota(linea.clave, notas, soloUna); lineaEditada = null },
@@ -651,10 +660,13 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
     }
     val editado = itemEditado
     if (editado != null && pedido != null) {
+        val suyo = vm.carta?.productos?.firstOrNull { it.id == editado.productoId }
         DialogoNota(
             nombre = editado.productoNombre ?: "Producto",
             notasIniciales = editado.notas.orEmpty(),
-            opciones = vm.carta?.productos?.firstOrNull { it.id == editado.productoId }?.opciones.orEmpty(),
+            opciones = suyo?.opciones.orEmpty(),
+            ingredientes = suyo?.ingredientesQuitables.orEmpty(),
+            alergenos = suyo?.let { infoAlergenos(it, vm.carta, emptyList()) },
             unidades = 1,
             aviso = "Este producto ya está en cocina: el cambio se guarda en PedIA, pero no se vuelve a imprimir. Avisa a cocina.",
             alGuardar = { notas, _ -> vm.editarNotaEnviada(pedido, editado, notas); itemEditado = null },
@@ -713,12 +725,17 @@ private fun DialogoNota(
     nombre: String,
     notasIniciales: String,
     opciones: List<String>,
+    /** Lo que se puede quitar del producto: al tocarlo se anota "sin <ingrediente>". */
+    ingredientes: List<String>,
+    /** Lo que lleva y sus alérgenos, para el botón "Ver alérgenos" (null = no se sabe). */
+    alergenos: InfoAlergenos?,
     unidades: Int,
     aviso: String?,
     alGuardar: (notas: String, soloUna: Boolean) -> Unit,
     alCancelar: () -> Unit,
 ) {
     var texto by remember { mutableStateOf(notasIniciales) }
+    var verAlergenos by remember { mutableStateOf(false) }
     val partes = texto.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     AlertDialog(
         onDismissRequest = alCancelar,
@@ -735,6 +752,22 @@ private fun DialogoNota(
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (ingredientes.isNotEmpty()) {
+                    QuitarIngredientes(
+                        ingredientes = ingredientes,
+                        quitado = { ing -> partes.any { it.equals(textoSin(ing), ignoreCase = true) } },
+                        alPulsar = { ing ->
+                            val sin = textoSin(ing)
+                            val puesto = partes.any { it.equals(sin, ignoreCase = true) }
+                            texto = (if (puesto) partes.filterNot { it.equals(sin, ignoreCase = true) } else partes + sin).joinToString(", ")
+                        },
+                    )
+                }
+                if (alergenos != null) {
+                    OutlinedButton(onClick = { verAlergenos = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text("Ver alérgenos e ingredientes", fontWeight = FontWeight.Bold)
+                    }
+                }
                 if (opciones.isNotEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         opciones.forEach { opcion ->
@@ -764,6 +797,7 @@ private fun DialogoNota(
             }
         },
     )
+    if (verAlergenos && alergenos != null) DialogoAlergenos(nombre, alergenos) { verAlergenos = false }
 }
 
 @Composable

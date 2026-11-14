@@ -1,24 +1,23 @@
 package com.pedia.movil.ui.kiosco
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,28 +26,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,7 +63,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
@@ -78,20 +79,18 @@ import com.pedia.movil.ui.Crema
 import com.pedia.movil.ui.DialogoConfirmar
 import com.pedia.movil.ui.GrisFoto
 import com.pedia.movil.ui.GrisTexto
-import com.pedia.movil.ui.Rojo
 import com.pedia.movil.ui.SelectorCantidad
 import com.pedia.movil.ui.Tinta
-import com.pedia.movil.ui.VentanaPedia
 import com.pedia.movil.ui.Verde
 import com.pedia.movil.ui.esMovil
 import com.pedia.movil.ui.euros
 import kotlinx.coroutines.delay
 
-// Carta del kiosko con la distribución de los autoservicios de comida rápida: categorías con
-// dibujo en una columna a la izquierda, productos en tarjetas blancas sobre fondo crema y la
-// barra del pedido siempre visible abajo.
+// Carta del kiosko con la distribución de los autoservicios de las hamburgueserías: categorías con foto
+// en una franja arriba, productos en cuadrícula y abajo la barra con inicio, la bolsa del pedido y
+// "Finalizar pedido". Un producto con algo que elegir se abre en su asistente paso a paso.
 
-private fun Carta.iconoDe(producto: Producto) =
+fun Carta.iconoDe(producto: Producto) =
     iconoCategoria(categorias.firstOrNull { it.id == producto.categoriaId }?.nombre.orEmpty())
 
 @Composable
@@ -103,92 +102,133 @@ fun CartaKiosco(vm: KioscoVM, ajustes: Ajustes) {
     val categoria = carta.categorias.firstOrNull { it.id == vm.categoria } ?: carta.categorias.firstOrNull()
     val movil = esMovil()
 
+    fun abrir(producto: Producto) {
+        if (producto.tieneAsistente) productoAbierto = producto else vm.anadir(LineaCarrito(producto, 1))
+    }
+
     Box(Modifier.fillMaxSize().background(Crema)) {
         Column(Modifier.fillMaxSize()) {
-            CabeceraKiosco(vm.paraLlevar)
-            Row(Modifier.weight(1f)) {
-                // Categorías
-                LazyColumn(
-                    Modifier.width(if (movil) 114.dp else 150.dp).fillMaxHeight().background(Color.White),
-                    contentPadding = PaddingValues(vertical = 8.dp),
+            FranjaCategorias(carta, api, categoria?.id) { vm.categoria = it }
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    categoria?.nombre.orEmpty(),
+                    fontSize = if (movil) 24.sp else 30.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Tinta,
+                    modifier = Modifier.weight(1f),
+                )
+                EtiquetaLugar(vm.paraLlevar)
+            }
+            // Al cambiar de categoría, los productos se funden con los nuevos.
+            AnimatedContent(
+                targetState = categoria?.id,
+                transitionSpec = { fadeIn(tween(240, delayMillis = 60)) togetherWith fadeOut(tween(120)) },
+                label = "categoria",
+                modifier = Modifier.weight(1f),
+            ) { idCategoria ->
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(if (movil) 140.dp else 190.dp),
+                    contentPadding = PaddingValues(if (movil) 12.dp else 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(carta.categorias, key = { it.id }) { cat ->
-                        ElementoCategoria(cat.nombre, iconoCategoria(cat.nombre), cat.id == categoria?.id) { vm.categoria = cat.id }
-                    }
-                }
-                VerticalDivider(color = Color(0xFFE7E2D8))
-                // Productos de la categoría elegida
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        categoria?.nombre.orEmpty(),
-                        fontSize = if (movil) 26.sp else 34.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Tinta,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                    )
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(if (movil) 135.dp else 180.dp),
-                        contentPadding = PaddingValues(if (movil) 10.dp else 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        items(carta.productosDe(categoria?.id), key = { it.id }) { producto ->
-                            TarjetaProductoKiosco(
-                                producto = producto,
-                                urlFoto = api.urlFoto(producto.fotoPath),
-                                icono = carta.iconoDe(producto),
-                                enPedido = vm.lineas.filter { it.producto.id == producto.id }.sumOf { it.cantidad },
-                                alAbrir = { productoAbierto = producto },
-                                // Sin opciones que elegir, el "+" lo añade directamente.
-                                alAnadirRapido = {
-                                    if (producto.opciones.isEmpty() && !producto.esMenu) vm.anadir(LineaCarrito(producto, 1)) else productoAbierto = producto
-                                },
-                            )
-                        }
+                    items(carta.productosDe(idCategoria), key = { it.id }) { producto ->
+                        TarjetaProductoKiosco(
+                            producto = producto,
+                            urlFoto = api.urlFoto(producto.fotoPath),
+                            icono = carta.iconoDe(producto),
+                            enPedido = vm.lineas.filter { it.producto.id == producto.id }.sumOf { it.cantidad },
+                        ) { abrir(producto) }
                     }
                 }
             }
-            BarraPedidoKiosco(
+            BarraKiosco(
                 unidades = vm.unidades,
                 total = vm.total,
-                alCancelar = { if (vm.lineas.isEmpty()) vm.cancelar() else confirmarCancelar = true },
+                alInicio = { if (vm.lineas.isEmpty()) vm.cancelar() else confirmarCancelar = true },
+                alAtras = null,
                 alVerPedido = vm::verResumen,
+                textoBoton = "Finalizar pedido",
+                alBoton = vm::verResumen,
             )
         }
-        AvisoAnadido(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp))
+        AvisoAnadido(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = if (movil) 96.dp else 110.dp))
+        // El asistente del producto sube desde abajo, a pantalla completa.
+        AnimatedContent(
+            targetState = productoAbierto,
+            transitionSpec = { (slideInVertically(tween(320)) { it / 5 } + fadeIn(tween(220))) togetherWith fadeOut(tween(180)) },
+            label = "asistente",
+        ) { producto ->
+            if (producto != null) {
+                AsistenteProducto(
+                    producto = producto,
+                    carta = carta,
+                    api = api,
+                    sugerencias = vm.complementos(producto),
+                    alTerminar = { principal, extras -> productoAbierto = null; vm.anadirDesdeAsistente(principal, extras) },
+                    alCerrar = { productoAbierto = null },
+                )
+            }
+        }
     }
 
-    productoAbierto?.let { producto ->
-        FichaProductoKiosco(
-            producto = producto,
-            carta = carta,
-            urlFoto = api.urlFoto(producto.fotoPath),
-            icono = carta.iconoDe(producto),
-            alAnadir = { vm.anadir(it); productoAbierto = null },
-            alCerrar = { productoAbierto = null },
-        )
-    }
     if (confirmarCancelar) {
-        DialogoConfirmar(
-            titulo = "¿Cancelar el pedido?",
-            texto = "Se borrará todo lo que has elegido.",
-            textoSi = "Sí, cancelar",
-            peligroso = true,
-            alConfirmar = { confirmarCancelar = false; vm.cancelar() },
-            alCancelar = { confirmarCancelar = false },
-        )
+        DialogoCancelar(alConfirmar = { confirmarCancelar = false; vm.cancelar() }, alCancelar = { confirmarCancelar = false })
     }
 }
 
 @Composable
-private fun CabeceraKiosco(paraLlevar: Boolean) {
-    Surface(color = Color.White, shadowElevation = 2.dp) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+private fun DialogoCancelar(alConfirmar: () -> Unit, alCancelar: () -> Unit) {
+    DialogoConfirmar(
+        titulo = "¿Volver al inicio?",
+        texto = "Se borrará todo lo que has elegido.",
+        textoSi = "Sí, empezar de nuevo",
+        peligroso = true,
+        alConfirmar = alConfirmar,
+        alCancelar = alCancelar,
+    )
+}
+
+/** Categorías en una franja arriba, cada una con la foto de uno de sus productos (o su dibujo). */
+@Composable
+private fun FranjaCategorias(carta: Carta, api: PediaApi, elegida: Long?, alElegir: (Long) -> Unit) {
+    val movil = esMovil()
+    Surface(color = Color.White, shadowElevation = 3.dp) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            EtiquetaLugar(paraLlevar)
+            items(carta.categorias, key = { it.id }) { cat ->
+                val marcada = cat.id == elegida
+                val conFoto = carta.productosDe(cat.id).firstOrNull { it.fotoPath != null }
+                Surface(
+                    onClick = { alElegir(cat.id) },
+                    color = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(if (marcada) 3.dp else 1.dp, if (marcada) Acento else Color(0xFFE5E7EB)),
+                    modifier = Modifier.width(if (movil) 108.dp else 140.dp),
+                ) {
+                    Column {
+                        ImagenProducto(
+                            conFoto?.let { api.urlFoto(it.fotoPath) },
+                            iconoCategoria(cat.nombre),
+                            Modifier.fillMaxWidth().height(if (movil) 64.dp else 84.dp),
+                            tamanoIcono = 0.7f,
+                        )
+                        Text(
+                            cat.nombre,
+                            fontSize = if (movil) 13.sp else 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (marcada) Color.White else Tinta,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().background(if (marcada) Acento else Color.White).padding(vertical = 6.dp, horizontal = 4.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -208,36 +248,6 @@ fun EtiquetaLugar(paraLlevar: Boolean) {
         }
     }
 }
-
-@Composable
-private fun ElementoCategoria(nombre: String, @DrawableRes icono: Int, elegida: Boolean, alPulsar: () -> Unit) {
-    val movil = esMovil()
-    Surface(onClick = alPulsar, color = if (elegida) AcentoSuave else Color.White) {
-        Row(Modifier.fillMaxWidth().height(if (movil) 96.dp else ALTO_CATEGORIA)) {
-            // Marca de la categoría elegida, como en los autoservicios.
-            Box(Modifier.width(6.dp).fillMaxHeight().background(if (elegida) Acento else Color.Transparent))
-            Column(
-                Modifier.weight(1f).padding(vertical = if (movil) 8.dp else 12.dp, horizontal = if (movil) 2.dp else 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(painterResource(icono), contentDescription = null, tint = Tinta, modifier = Modifier.size(if (movil) 40.dp else 52.dp))
-                Spacer(Modifier.height(if (movil) 4.dp else 6.dp))
-                Text(
-                    nombre,
-                    fontSize = if (movil) 13.sp else 15.sp,
-                    lineHeight = if (movil) 15.sp else 17.sp,
-                    fontWeight = if (elegida) FontWeight.Black else FontWeight.SemiBold,
-                    color = Tinta,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-private val ALTO_CATEGORIA: Dp = 116.dp
 
 /** Foto del producto o, si no tiene, el dibujo de su categoría sobre gris claro. */
 @Composable
@@ -265,27 +275,27 @@ fun ImagenProducto(url: String?, @DrawableRes icono: Int, modifier: Modifier, ta
     }
 }
 
+/** Producto de la carta: foto, nombre y precio. Al tocarlo se abre su asistente o se añade. */
 @Composable
 private fun TarjetaProductoKiosco(
     producto: Producto,
     urlFoto: String?,
     @DrawableRes icono: Int,
     enPedido: Int,
-    alAbrir: () -> Unit,
-    alAnadirRapido: () -> Unit,
+    alPulsar: () -> Unit,
 ) {
     val disponible = producto.estaDisponible
     Surface(
-        onClick = alAbrir,
+        onClick = alPulsar,
         enabled = disponible,
         color = Color.White,
         shape = RoundedCornerShape(20.dp),
         shadowElevation = 2.dp,
         border = if (enPedido > 0) BorderStroke(3.dp, Acento) else null,
     ) {
-        Column {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box {
-                ImagenProducto(urlFoto, icono, Modifier.fillMaxWidth().aspectRatio(1.2f))
+                ImagenProducto(urlFoto, icono, Modifier.fillMaxWidth().aspectRatio(1.25f))
                 if (!disponible) {
                     Box(Modifier.matchParentSize().background(Color.White.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
                         Text("AGOTADO", fontWeight = FontWeight.Black, color = GrisTexto, fontSize = 18.sp)
@@ -293,94 +303,121 @@ private fun TarjetaProductoKiosco(
                 }
                 if (enPedido > 0) {
                     Box(
-                        Modifier.align(Alignment.TopEnd).padding(10.dp).size(38.dp).clip(CircleShape).background(Acento),
+                        Modifier.align(Alignment.TopEnd).padding(10.dp).size(36.dp).clip(CircleShape).background(Acento),
                         contentAlignment = Alignment.Center,
-                    ) { Text(enPedido.toString(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp) }
+                    ) { Text(enPedido.toString(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp) }
                 }
             }
-            Column(Modifier.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp)) {
-                Text(
-                    producto.nombre,
-                    fontSize = 18.sp,
-                    lineHeight = 21.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (disponible) Tinta else GrisTexto,
-                    maxLines = 2,
-                    minLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        euros(producto.precio),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Black,
-                        color = if (disponible) Tinta else GrisTexto,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (disponible) {
-                        Surface(onClick = alAnadirRapido, color = Acento, shape = CircleShape, modifier = Modifier.size(44.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("+", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
+            Text(
+                producto.nombre,
+                fontSize = 18.sp,
+                lineHeight = 21.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (disponible) Tinta else GrisTexto,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 12.dp),
+            )
+            Text(
+                euros(producto.precio),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (disponible) GrisTexto else Color(0xFFB4B4B8),
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+            )
         }
     }
 }
 
+/** Barra de abajo: volver, inicio, la bolsa con lo pedido y el botón para seguir. */
 @Composable
-private fun BarraPedidoKiosco(unidades: Int, total: Long, alCancelar: () -> Unit, alVerPedido: () -> Unit) {
+private fun BarraKiosco(
+    unidades: Int,
+    total: Long,
+    alInicio: () -> Unit,
+    alAtras: (() -> Unit)?,
+    /** En la carta, la bolsa es un botón "Ver mi pedido" para revisar o cambiar lo pedido. */
+    alVerPedido: (() -> Unit)? = null,
+    textoBoton: String,
+    cargando: Boolean = false,
+    alBoton: () -> Unit,
+) {
     val movil = esMovil()
     Surface(color = Color.White, shadowElevation = 16.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = if (movil) 10.dp else 16.dp, vertical = if (movil) 10.dp else 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = if (movil) 10.dp else 18.dp, vertical = if (movil) 10.dp else 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
-                onClick = alCancelar,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                modifier = Modifier.heightIn(min = if (movil) 56.dp else 64.dp),
-                contentPadding = PaddingValues(horizontal = if (movil) 12.dp else 24.dp),
-            ) { Text(if (movil) "Cancelar" else "Cancelar pedido", color = Rojo, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(horizontal = if (movil) 10.dp else 16.dp)) {
-                Text(
-                    when {
-                        unidades == 0 -> "Tu pedido está vacío"
-                        movil -> "$unidades ${if (unidades == 1) "producto" else "productos"}"
-                        else -> "Mi pedido · $unidades ${if (unidades == 1) "producto" else "productos"}"
-                    },
-                    color = GrisTexto,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                )
-                Text(euros(total), color = Tinta, fontSize = if (movil) 24.sp else 28.sp, fontWeight = FontWeight.Black, maxLines = 1)
+            if (alAtras != null) {
+                BotonRedondoKiosco(Icons.AutoMirrored.Filled.ArrowBack, "Volver", alAtras)
+                Spacer(Modifier.width(10.dp))
             }
+            BotonRedondoKiosco(Icons.Filled.Home, "Volver al inicio", alInicio)
+            Spacer(Modifier.weight(1f))
+            if (alVerPedido != null) {
+                OutlinedButton(
+                    onClick = alVerPedido,
+                    enabled = unidades > 0,
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(2.dp, if (unidades > 0) Acento else Color(0xFFE5E7EB)),
+                    modifier = Modifier.heightIn(min = if (movil) 54.dp else 64.dp),
+                    contentPadding = PaddingValues(horizontal = if (movil) 10.dp else 18.dp),
+                ) {
+                    Bolsa(unidades)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (movil) "Mi pedido" else "Ver mi pedido", fontSize = if (movil) 15.sp else 18.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1)
+                    Spacer(Modifier.width(8.dp))
+                    Text(euros(total), color = Tinta, fontSize = if (movil) 16.sp else 20.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                }
+            } else {
+                Bolsa(unidades)
+                Spacer(Modifier.width(8.dp))
+                Text(euros(total), color = Tinta, fontSize = if (movil) 19.sp else 24.sp, fontWeight = FontWeight.Black, maxLines = 1)
+            }
+            Spacer(Modifier.width(if (movil) 8.dp else 16.dp))
             Button(
-                onClick = alVerPedido,
-                enabled = unidades > 0,
+                onClick = alBoton,
+                enabled = unidades > 0 && !cargando,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Acento,
                     contentColor = Color.White,
                     disabledContainerColor = Color(0xFFEDEDED),
                     disabledContentColor = Color(0xFFA1A1AA),
                 ),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.heightIn(min = if (movil) 56.dp else 64.dp),
-                contentPadding = PaddingValues(horizontal = if (movil) 14.dp else 26.dp),
-            ) { Text("Ver mi pedido", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Black, maxLines = 1) }
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.heightIn(min = if (movil) 54.dp else 64.dp),
+                contentPadding = PaddingValues(horizontal = if (movil) 16.dp else 28.dp),
+            ) {
+                if (cargando) CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
+                else Text(textoBoton, fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Black, maxLines = 1)
+            }
         }
     }
 }
 
+/** La bolsa del pedido con el número de productos encima. */
+@Composable
+private fun Bolsa(unidades: Int) {
+    val movil = esMovil()
+    Box {
+        Icon(Icons.Filled.ShoppingCart, contentDescription = "Mi pedido", tint = Tinta, modifier = Modifier.padding(top = 6.dp, end = 8.dp).size(if (movil) 28.dp else 36.dp))
+        if (unidades > 0) {
+            Box(
+                Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(Acento),
+                contentAlignment = Alignment.Center,
+            ) { Text(unidades.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black) }
+        }
+    }
+}
+
+/** Aviso verde "… agregado a tu pedido" que sube un momento sobre la barra, como en los autoservicios. */
 @Composable
 private fun AvisoAnadido(vm: KioscoVM, modifier: Modifier) {
     LaunchedEffect(vm.avisoId) {
         if (vm.avisoAnadido != null) {
-            delay(2200)
+            delay(2600)
             vm.avisoAnadido = null
         }
     }
@@ -388,202 +425,19 @@ private fun AvisoAnadido(vm: KioscoVM, modifier: Modifier) {
         visible = vm.avisoAnadido != null,
         enter = slideInVertically { it } + fadeIn(),
         exit = slideOutVertically { it } + fadeOut(),
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp),
     ) {
-        Surface(color = Verde, shape = RoundedCornerShape(50), shadowElevation = 8.dp) {
+        Surface(color = Verde, shape = RoundedCornerShape(14.dp), shadowElevation = 8.dp, modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
             Text(
-                "✓  " + (vm.avisoAnadido ?: ""),
+                vm.avisoAnadido ?: "",
                 color = Color.White,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 26.dp, vertical = 14.dp).widthIn(max = 620.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             )
-        }
-    }
-}
-
-// ---------- Ficha del producto ----------
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun FichaProductoKiosco(
-    producto: Producto,
-    carta: Carta,
-    urlFoto: String?,
-    @DrawableRes icono: Int,
-    /** La línea del pedido que se está editando; sin ella, la ficha añade una nueva. */
-    linea: LineaCarrito? = null,
-    alAnadir: (LineaCarrito) -> Unit,
-    alCerrar: () -> Unit,
-) {
-    var cantidad by remember { mutableIntStateOf(linea?.cantidad ?: 1) }
-    var elegidas by remember { mutableStateOf(linea?.opcionesMarcadas.orEmpty()) }
-    // Menús: opciones elegidas en cada grupo (id del grupo → ids de las opciones).
-    var menu by remember {
-        mutableStateOf(
-            linea?.let { l -> producto.grupos.associate { g -> g.id to g.opciones.map { it.id }.filter { it in l.selecciones } } }.orEmpty(),
-        )
-    }
-    // Lo quitado a cada opción elegida ("Sin queso"...) y qué desplegables están abiertos.
-    var quitados by remember { mutableStateOf(linea?.quitados.orEmpty()) }
-    var abiertos by remember { mutableStateOf(linea?.selecciones.orEmpty().toSet()) }
-    val seleccionadas = menu.values.flatten()
-    val faltan = producto.grupos.filter { it.obligatorio && menu[it.id].isNullOrEmpty() }
-    val precioUnidad = producto.precio + producto.grupos.flatMap { it.opciones }.filter { it.id in seleccionadas }.sumOf { it.suplemento }
-    val movil = esMovil()
-
-    VentanaPedia(alCerrar) {
-        Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(28.dp),
-            modifier = Modifier.fillMaxWidth(0.94f).widthIn(max = 680.dp).heightIn(max = 1100.dp),
-        ) {
-            Column {
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    Box {
-                        ImagenProducto(urlFoto, icono, Modifier.fillMaxWidth().height(if (movil) 170.dp else 300.dp), tamanoIcono = 0.55f)
-                        Surface(
-                            onClick = alCerrar,
-                            color = Color.White,
-                            shape = CircleShape,
-                            shadowElevation = 4.dp,
-                            modifier = Modifier.align(Alignment.TopEnd).padding(14.dp).size(52.dp),
-                        ) { Box(contentAlignment = Alignment.Center) { Text("✕", fontSize = 24.sp, color = Tinta) } }
-                    }
-                    Column(Modifier.padding(if (movil) 18.dp else 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(producto.nombre, fontSize = if (movil) 26.sp else 32.sp, lineHeight = if (movil) 30.sp else 36.sp, fontWeight = FontWeight.Black, color = Tinta)
-                        producto.descripcion?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, fontSize = 18.sp, color = GrisTexto)
-                        }
-                        Text(euros(producto.precio), fontSize = if (movil) 24.sp else 28.sp, fontWeight = FontWeight.Black, color = Tinta)
-                        producto.grupos.forEach { grupo ->
-                            Spacer(Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(grupo.nombre, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    (if (grupo.maxSelecciones <= 1) "Elige 1" else "Elige hasta ${grupo.maxSelecciones}") +
-                                        if (grupo.obligatorio) " · Obligatorio" else " · Opcional",
-                                    fontSize = 15.sp,
-                                    color = if (grupo in faltan) Rojo else GrisTexto,
-                                    modifier = Modifier.padding(bottom = 3.dp),
-                                )
-                            }
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                grupo.opciones.forEach { opcion ->
-                                    val actuales = menu[grupo.id].orEmpty()
-                                    val marcada = opcion.id in actuales
-                                    CasillaOpcion(
-                                        texto = opcion.texto,
-                                        extra = when {
-                                            opcion.agotada -> "Agotado"
-                                            opcion.suplemento > 0 -> "+ " + euros(opcion.suplemento)
-                                            else -> null
-                                        },
-                                        marcada = marcada,
-                                        habilitada = !opcion.agotada,
-                                    ) {
-                                        val nuevas = when {
-                                            marcada -> actuales - opcion.id
-                                            grupo.maxSelecciones <= 1 -> listOf(opcion.id)
-                                            actuales.size < grupo.maxSelecciones -> actuales + opcion.id
-                                            else -> actuales
-                                        }
-                                        menu = menu + (grupo.id to nuevas)
-                                        // Al elegir algo con ingredientes editables, su desplegable se abre solo.
-                                        if (!marcada && opcion.id in nuevas) abiertos = abiertos + opcion.id
-                                    }
-                                }
-                            }
-                            grupo.opciones.filter { it.id in menu[grupo.id].orEmpty() }.forEach { opcion ->
-                                val ingredientes = carta.ingredientesDe(opcion)
-                                if (ingredientes.isNotEmpty()) {
-                                    DesplegableIngredientes(
-                                        nombre = opcion.texto,
-                                        ingredientes = ingredientes,
-                                        quitados = quitados[opcion.id].orEmpty(),
-                                        abierto = opcion.id in abiertos,
-                                        alAbrirCerrar = {
-                                            abiertos = if (opcion.id in abiertos) abiertos - opcion.id else abiertos + opcion.id
-                                        },
-                                        alCambiar = { ingrediente ->
-                                            val actuales = quitados[opcion.id].orEmpty()
-                                            quitados = quitados + (opcion.id to if (ingrediente in actuales) actuales - ingrediente else actuales + ingrediente)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        if (producto.opciones.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text("Personaliza tu producto", fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                producto.opciones.forEach { opcion ->
-                                    val marcada = opcion in elegidas
-                                    CasillaOpcion(opcion, null, marcada, true) {
-                                        elegidas = if (marcada) elegidas - opcion else elegidas + opcion
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Cantidad", fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = Tinta, modifier = Modifier.weight(1f))
-                            SelectorCantidad(cantidad, { cantidad = it.coerceIn(1, 99) }, tamano = 56.dp)
-                        }
-                    }
-                }
-                Surface(color = Color.White, shadowElevation = 12.dp) {
-                    Row(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp), horizontalArrangement = Arrangement.spacedBy(if (movil) 10.dp else 14.dp)) {
-                        OutlinedButton(
-                            onClick = alCerrar,
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                            modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 72.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                        ) { Text("Cancelar", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
-                        Button(
-                            onClick = {
-                                val notas = producto.opciones.filter { it in elegidas } + notasDeIngredientes(producto, seleccionadas, quitados)
-                                alAnadir(
-                                    LineaCarrito(
-                                        producto,
-                                        cantidad,
-                                        notas.joinToString(", "),
-                                        seleccionadas,
-                                        elegidas,
-                                        quitados.filterKeys { it in seleccionadas }.filterValues { it.isNotEmpty() },
-                                    ),
-                                )
-                            },
-                            enabled = faltan.isEmpty(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Acento,
-                                contentColor = Color.White,
-                                disabledContainerColor = Color(0xFFEDEDED),
-                                disabledContentColor = Color(0xFF71717A),
-                            ),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(if (movil) 2.4f else 2f).heightIn(min = if (movil) 60.dp else 72.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) {
-                            Text(
-                                when {
-                                    faltan.isNotEmpty() -> "Elige: ${faltan.first().nombre}"
-                                    linea != null -> "Guardar cambios · ${euros(precioUnidad * cantidad)}"
-                                    else -> "Añadir al pedido · ${euros(precioUnidad * cantidad)}"
-                                },
-                                fontSize = if (movil) 17.sp else 20.sp,
-                                fontWeight = FontWeight.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -600,79 +454,7 @@ fun notasDeIngredientes(producto: Producto, seleccionadas: List<Long>, quitados:
     }
 }
 
-/** Desplegable bajo una opción de menú para quitarle ingredientes ("Sin queso", "Sin cebolla"...). */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun DesplegableIngredientes(
-    nombre: String,
-    ingredientes: List<String>,
-    quitados: Set<String>,
-    abierto: Boolean,
-    alAbrirCerrar: () -> Unit,
-    alCambiar: (String) -> Unit,
-) {
-    Surface(
-        color = Color(0xFFFAFAFA),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(2.dp, Acento),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column {
-            Surface(onClick = alAbrirCerrar, color = Color.Transparent) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Personalizar $nombre", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                        Text(
-                            if (quitados.isEmpty()) "Toca lo que quieras quitar" else ingredientes.filter { it in quitados }.joinToString(", "),
-                            fontSize = 15.sp,
-                            color = GrisTexto,
-                        )
-                    }
-                    Text(if (abierto) "▲" else "▼", fontSize = 18.sp, color = Tinta)
-                }
-            }
-            AnimatedVisibility(visible = abierto) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
-                ) {
-                    ingredientes.forEach { ingrediente ->
-                        CasillaOpcion(ingrediente, null, ingrediente in quitados, true) { alCambiar(ingrediente) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Casilla marcable de la ficha (opción de menú o "sin cebolla"), con precio extra si lo tiene. */
-@Composable
-private fun CasillaOpcion(texto: String, extra: String?, marcada: Boolean, habilitada: Boolean, alPulsar: () -> Unit) {
-    Surface(
-        onClick = alPulsar,
-        enabled = habilitada,
-        color = if (marcada) AcentoSuave else if (habilitada) Color.White else Color(0xFFF4F4F5),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(2.dp, if (marcada) Acento else Color(0xFFE5E7EB)),
-    ) {
-        Row(Modifier.heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(22.dp)
-                    .background(if (marcada) Acento else Color.White, CircleShape)
-                    .border(2.dp, if (marcada) Acento else Color(0xFFD1D5DB), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { if (marcada) Text("✓", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color.White) }
-            Spacer(Modifier.width(9.dp))
-            Column {
-                Text(texto, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (habilitada) Tinta else GrisTexto)
-                extra?.let { Text(it, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GrisTexto) }
-            }
-        }
-    }
-}
-
-// ---------- Mi pedido ----------
+// ---------- Revisa tu pedido ----------
 
 @Composable
 fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
@@ -681,18 +463,23 @@ fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
     val enviando = vm.paso == PasoKiosco.ENVIANDO
     var productoAbierto by remember { mutableStateOf<Producto?>(null) }
     var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
+    var confirmarCancelar by remember { mutableStateOf(false) }
     val sugerencias = vm.sugerencias()
     val movil = esMovil()
 
     Box(Modifier.fillMaxSize().background(Crema)) {
         Column(Modifier.fillMaxSize()) {
             Surface(color = Color.White, shadowElevation = 2.dp) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Mi pedido", fontSize = if (movil) 28.sp else 36.sp, fontWeight = FontWeight.Black, color = Tinta, modifier = Modifier.weight(1f))
-                    EtiquetaLugar(vm.paraLlevar)
-                }
+                Text(
+                    "Revisa tu pedido",
+                    fontSize = if (movil) 26.sp else 32.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Tinta,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                )
             }
-            // Las líneas del pedido ocupan todo el ancho; lo que se puede añadir, en cuadrícula debajo.
+            // El pedido y el cambio de lugar ocupan todo el ancho; lo que se puede añadir, en cuadrícula debajo.
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(if (movil) 130.dp else 170.dp),
                 contentPadding = PaddingValues(if (movil) 12.dp else 20.dp),
@@ -700,143 +487,99 @@ fun ResumenKiosco(vm: KioscoVM, ajustes: Ajustes) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
-                items(vm.lineas, key = { it.clave }, span = { GridItemSpan(maxLineSpan) }) { linea ->
-                    FilaPedido(
-                        linea = linea,
-                        urlFoto = api.urlFoto(linea.producto.fotoPath),
-                        icono = carta.iconoDe(linea.producto),
-                        bloqueado = enviando,
-                        alEditar = { lineaEditada = linea },
-                        alCambiar = { delta -> vm.cambiarCantidad(linea.clave, delta) },
-                    )
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    TarjetaPedido(vm, carta, api, bloqueado = enviando, alEditar = { lineaEditada = it })
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    FilaLugar(vm.paraLlevar, habilitada = !enviando, alCambiar = vm::cambiarLugar)
                 }
                 if (sugerencias.isNotEmpty() && !enviando) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            "¿Te apetece algo más?",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Tinta,
-                            modifier = Modifier.padding(top = 16.dp),
-                        )
+                        Text("¿Te apetece algo más?", fontSize = 24.sp, fontWeight = FontWeight.Black, color = Tinta, modifier = Modifier.padding(top = 12.dp))
                     }
                     items(sugerencias, key = { it.id }) { producto ->
-                        Sugerencia(producto, api.urlFoto(producto.fotoPath), carta.iconoDe(producto)) { productoAbierto = producto }
-                    }
-                }
-            }
-            Surface(color = Color.White, shadowElevation = 16.dp) {
-                Column(Modifier.fillMaxWidth().padding(if (movil) 12.dp else 20.dp)) {
-                    vm.errorEnvio?.let {
-                        AvisoError("No se ha podido enviar el pedido. $it")
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Total", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Tinta)
-                            Text("IVA incluido", fontSize = 15.sp, color = GrisTexto)
-                        }
-                        Text(euros(vm.total), fontSize = if (movil) 30.sp else 40.sp, fontWeight = FontWeight.Black, color = Tinta)
-                    }
-                    Spacer(Modifier.height(if (movil) 10.dp else 16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        OutlinedButton(
-                            onClick = vm::seguirPidiendo,
-                            enabled = !enviando,
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
-                            modifier = Modifier.weight(1f).heightIn(min = if (movil) 60.dp else 76.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) { Text("Seguir pidiendo", fontSize = if (movil) 17.sp else 20.sp, fontWeight = FontWeight.Bold, color = Tinta, maxLines = 1) }
-                        Button(
-                            onClick = vm::confirmar,
-                            enabled = !enviando && vm.lineas.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Acento, contentColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1.4f).heightIn(min = if (movil) 60.dp else 76.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                        ) {
-                            if (enviando) CircularProgressIndicator(color = Tinta, strokeWidth = 3.dp, modifier = Modifier.size(30.dp))
-                            else Text("Finalizar pedido", fontSize = if (movil) 18.sp else 22.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                        Sugerencia(producto, api.urlFoto(producto.fotoPath), carta.iconoDe(producto)) {
+                            if (producto.tieneAsistente) productoAbierto = producto else vm.anadir(LineaCarrito(producto, 1))
                         }
                     }
                 }
             }
-        }
-        AvisoAnadido(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 200.dp))
-    }
-
-    productoAbierto?.let { producto ->
-        FichaProductoKiosco(
-            producto = producto,
-            carta = carta,
-            urlFoto = api.urlFoto(producto.fotoPath),
-            icono = carta.iconoDe(producto),
-            alAnadir = { vm.anadir(it); productoAbierto = null },
-            alCerrar = { productoAbierto = null },
-        )
-    }
-    lineaEditada?.let { linea ->
-        FichaProductoKiosco(
-            producto = linea.producto,
-            carta = carta,
-            urlFoto = api.urlFoto(linea.producto.fotoPath),
-            icono = carta.iconoDe(linea.producto),
-            linea = linea,
-            alAnadir = { vm.editarLinea(linea.clave, it); lineaEditada = null },
-            alCerrar = { lineaEditada = null },
-        )
-    }
-}
-
-@Composable
-private fun FilaPedido(
-    linea: LineaCarrito,
-    urlFoto: String?,
-    @DrawableRes icono: Int,
-    bloqueado: Boolean,
-    alEditar: () -> Unit,
-    alCambiar: (Int) -> Unit,
-) {
-    if (esMovil()) {
-        FilaPedidoMovil(linea, urlFoto, icono, bloqueado, alEditar, alCambiar)
-        return
-    }
-    Surface(color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            ImagenProducto(urlFoto, icono, Modifier.size(88.dp).clip(RoundedCornerShape(14.dp)), tamanoIcono = 0.6f)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(linea.producto.nombre, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                if (linea.detalle.isNotBlank()) Text(linea.detalle, fontSize = 16.sp, color = GrisTexto)
-                Text(euros(linea.precioUnidad) + " / ud.", fontSize = 15.sp, color = GrisTexto)
-                if (linea.editable && !bloqueado) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = alEditar,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(2.dp, Acento),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                    ) { Text("Editar", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Tinta) }
-                }
+            vm.errorEnvio?.let {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { AvisoError("No se ha podido enviar el pedido. $it") }
             }
-            if (!bloqueado) SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = 48.dp)
-            Text(
-                euros(linea.subtotal),
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Black,
-                color = Tinta,
-                textAlign = TextAlign.End,
-                modifier = Modifier.width(112.dp),
+            BarraKiosco(
+                unidades = vm.unidades,
+                total = vm.total,
+                alInicio = { confirmarCancelar = true },
+                alAtras = vm::seguirPidiendo,
+                textoBoton = "Proceder al pago",
+                cargando = enviando,
+                alBoton = vm::confirmar,
             )
         }
+        AvisoAnadido(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = if (movil) 96.dp else 110.dp))
+        AnimatedContent(
+            targetState = productoAbierto to lineaEditada,
+            transitionSpec = { (slideInVertically(tween(320)) { it / 5 } + fadeIn(tween(220))) togetherWith fadeOut(tween(180)) },
+            label = "asistente",
+        ) { (producto, linea) ->
+            when {
+                linea != null -> AsistenteProducto(
+                    producto = linea.producto,
+                    carta = carta,
+                    api = api,
+                    linea = linea,
+                    alTerminar = { principal, _ -> vm.editarLinea(linea.clave, principal); lineaEditada = null },
+                    alCerrar = { lineaEditada = null },
+                )
+                producto != null -> AsistenteProducto(
+                    producto = producto,
+                    carta = carta,
+                    api = api,
+                    sugerencias = vm.complementos(producto),
+                    alTerminar = { principal, extras -> productoAbierto = null; vm.anadirDesdeAsistente(principal, extras) },
+                    alCerrar = { productoAbierto = null },
+                )
+            }
+        }
+    }
+
+    if (confirmarCancelar) {
+        DialogoCancelar(alConfirmar = { confirmarCancelar = false; vm.cancelar() }, alCancelar = { confirmarCancelar = false })
     }
 }
 
-/** En un móvil no cabe todo en una fila: nombre y precio arriba; editar y cantidad, debajo. */
+/** Todo lo pedido en una tarjeta: cada producto con su cantidad, lo elegido y el total. */
 @Composable
-private fun FilaPedidoMovil(
+private fun TarjetaPedido(vm: KioscoVM, carta: Carta, api: PediaApi, bloqueado: Boolean, alEditar: (LineaCarrito) -> Unit) {
+    Surface(color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
+        Column(Modifier.padding(if (esMovil()) 12.dp else 18.dp)) {
+            vm.lineas.forEachIndexed { i, linea ->
+                if (i > 0) HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color(0xFFEFEFF1))
+                LineaRevisa(
+                    linea = linea,
+                    urlFoto = api.urlFoto(linea.producto.fotoPath),
+                    icono = carta.iconoDe(linea.producto),
+                    bloqueado = bloqueado,
+                    alEditar = { alEditar(linea) },
+                    alCambiar = { delta -> vm.cambiarCantidad(linea.clave, delta) },
+                )
+            }
+            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color(0xFFEFEFF1))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Total", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Tinta)
+                    Text("IVA incluido", fontSize = 14.sp, color = GrisTexto)
+                }
+                Text(euros(vm.total), fontSize = if (esMovil()) 28.sp else 34.sp, fontWeight = FontWeight.Black, color = Acento)
+            }
+        }
+    }
+}
+
+/** Una línea de "Revisa tu pedido": foto con la cantidad debajo y "Editar"; a la derecha, lo elegido. */
+@Composable
+private fun LineaRevisa(
     linea: LineaCarrito,
     urlFoto: String?,
     @DrawableRes icono: Int,
@@ -844,34 +587,45 @@ private fun FilaPedidoMovil(
     alEditar: () -> Unit,
     alCambiar: (Int) -> Unit,
 ) {
-    Surface(color = Color.White, shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp) {
-        Column(Modifier.padding(12.dp)) {
-            Row {
-                ImagenProducto(urlFoto, icono, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), tamanoIcono = 0.6f)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(linea.producto.nombre, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = Tinta)
-                    if (linea.detalle.isNotBlank()) Text(linea.detalle, fontSize = 15.sp, color = GrisTexto)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(euros(linea.subtotal), fontSize = 19.sp, fontWeight = FontWeight.Black, color = Tinta)
-            }
+    val movil = esMovil()
+    Row {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(if (movil) 120.dp else 150.dp)) {
+            ImagenProducto(urlFoto, icono, Modifier.size(if (movil) 72.dp else 92.dp).clip(RoundedCornerShape(14.dp)), tamanoIcono = 0.6f)
             if (!bloqueado) {
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (linea.editable) {
-                        OutlinedButton(
-                            onClick = alEditar,
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(2.dp, Acento),
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                        ) { Text("Editar", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Tinta) }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = 48.dp)
+                SelectorCantidad(linea.cantidad, { alCambiar(it - linea.cantidad) }, minimo = 0, tamano = if (movil) 38.dp else 44.dp)
+                if (linea.editable) {
+                    TextButton(onClick = alEditar) { Text("Editar", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Acento) }
                 }
             }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row {
+                Text(linea.producto.nombre, fontSize = if (movil) 18.sp else 20.sp, fontWeight = FontWeight.ExtraBold, color = Tinta, modifier = Modifier.weight(1f))
+                Text(euros(linea.subtotal), fontSize = if (movil) 18.sp else 20.sp, fontWeight = FontWeight.Black, color = Tinta)
+            }
+            // Lo elegido y lo quitado, una cosa por línea.
+            linea.detalle.split(", ").filter { it.isNotBlank() }.forEach {
+                Text(it, fontSize = 15.sp, color = GrisTexto)
+            }
+            if (linea.cantidad > 1) Text("${euros(linea.precioUnidad)} / ud.", fontSize = 14.sp, color = GrisTexto)
+        }
+    }
+}
+
+/** "¿Lo quieres para llevar?": se puede cambiar aquí sin volver a empezar. */
+@Composable
+private fun FilaLugar(paraLlevar: Boolean, habilitada: Boolean, alCambiar: (Boolean) -> Unit) {
+    Surface(color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_para_llevar), contentDescription = null, tint = Tinta, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("¿Lo quieres para llevar?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Tinta)
+                Text(if (paraLlevar) "Ahora: para llevar" else "Ahora: para tomar aquí", fontSize = 15.sp, color = GrisTexto)
+            }
+            Switch(checked = paraLlevar, onCheckedChange = alCambiar, enabled = habilitada)
         }
     }
 }
