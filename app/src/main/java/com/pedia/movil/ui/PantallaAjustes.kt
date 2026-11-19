@@ -117,6 +117,8 @@ fun PantallaAjustes(
     }
 
     fun guardar() {
+        // Si se cambia a mano dónde está PedIA, el local de esa dirección pasa a ser el guardado (su nombre se lee al conectar).
+        if (ip.trim() != ajustes.servidorIp || puerto.toIntOrNull()?.let { it != ajustes.servidorPuerto } == true) ajustes.servidorNombre = ""
         ajustes.servidorIp = ip
         puerto.toIntOrNull()?.let { ajustes.servidorPuerto = it }
         ajustes.nombreCamarero = camarero
@@ -183,6 +185,9 @@ fun PantallaAjustes(
                             "Esta red: ${ipLocal(contexto) ?: "sin conexión"}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (ajustes.servidorNombre.isNotBlank()) {
+                        Text("Local guardado: ${ajustes.servidorNombre}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             ip, { ip = it }, label = { Text("IP del ordenador de PedIA") }, singleLine = true,
@@ -229,13 +234,13 @@ fun PantallaAjustes(
                             )
                         }
                         lista.forEach { pedia ->
-                            Card(Modifier.fillMaxWidth().clickable { ip = pedia.ip; resultadoConexion = "Seleccionado ${pedia.ip}" }) {
+                            Card(Modifier.fillMaxWidth().clickable { ip = pedia.ip; puerto = pedia.puerto.toString(); resultadoConexion = "Seleccionado ${pedia.ip}" }) {
                                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(pedia.nombreLocal ?: "PedIA", fontWeight = FontWeight.Bold)
                                         Text(pedia.ip, style = MaterialTheme.typography.bodySmall)
                                     }
-                                    Text(if (ip == pedia.ip) "✓ Elegido" else "Usar este", color = AzulPedia)
+                                    Text(if (ip == pedia.ip && puerto == pedia.puerto.toString()) "✓ Elegido" else "Usar este", color = AzulPedia)
                                 }
                             }
                         }

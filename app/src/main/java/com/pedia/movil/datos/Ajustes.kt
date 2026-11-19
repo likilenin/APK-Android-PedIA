@@ -26,6 +26,11 @@ class Ajustes(contexto: Context) {
         get() = prefs.getInt("servidor_puerto", 4000)
         set(v) = guardarEntero("servidor_puerto", v)
 
+    /** Nombre del local al que se conectó la última vez (para reconocerlo en la wifi aunque cambie su dirección). */
+    var servidorNombre: String
+        get() = texto("servidor_nombre")
+        set(v) = guardarTexto("servidor_nombre", v.trim())
+
     var modo: Modo?
         get() = Modo.entries.firstOrNull { it.name == texto("modo") }
         set(v) = guardarTexto("modo", v?.name ?: "")

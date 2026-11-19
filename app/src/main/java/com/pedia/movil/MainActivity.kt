@@ -25,7 +25,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.pedia.movil.datos.Ajustes
+import com.pedia.movil.datos.Cartas
+import com.pedia.movil.datos.Conexion
+import com.pedia.movil.datos.EstadoConexion
 import com.pedia.movil.datos.Modo
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.pedia.movil.ui.DialogoElegirLocal
 import com.pedia.movil.ui.PantallaActualizacion
 import com.pedia.movil.ui.PantallaAjustes
 import com.pedia.movil.ui.PantallaInicio
@@ -102,6 +109,18 @@ private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Bool
         modoKiosco(pantalla == Pantalla.KIOSCO, ajustes.kioscoFijarPantalla)
     }
 
+    // Nada más arrancar la app: conectar con el local de la wifi (el guardado, o preguntar si hay varios) y cargar
+    // las cartas. Al volver a la app se vuelven a pedir las cartas, o se sigue buscando si no había conexión.
+    val contexto = LocalContext.current
+    LaunchedEffect(Unit) { Conexion.arrancar(contexto, ajustes) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        when (Conexion.estado) {
+            is EstadoConexion.Conectado -> Cartas.cargarTodas(ajustes)
+            is EstadoConexion.Sin -> Conexion.arrancar(contexto, ajustes)
+            else -> Unit
+        }
+    }
+
     when (pantalla) {
         Pantalla.ACTUALIZACION -> PantallaActualizacion(
             ajustes,
@@ -126,7 +145,11 @@ private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Bool
         )
         Pantalla.AJUSTES -> PantallaAjustes(
             ajustes,
-            alVolver = { pantalla = if (volverDeAjustes == Pantalla.INICIO) pantallaDelModo() else volverDeAjustes },
+            alVolver = {
+                // Puede haberse cambiado dónde está PedIA: se comprueba la conexión (con lo mismo es instantáneo).
+                Conexion.arrancar(contexto, ajustes)
+                pantalla = if (volverDeAjustes == Pantalla.INICIO) pantallaDelModo() else volverDeAjustes
+            },
             alActualizar = {
                 actualizandoDesdeAjustes = true
                 pantalla = Pantalla.ACTUALIZACION
@@ -143,5 +166,16 @@ private fun AppPedia(ajustes: Ajustes, modoKiosco: (activo: Boolean, fijar: Bool
             alAbrirAjustes = { abrirAjustesDesde(Pantalla.CAMARERO) },
             alCambiarModo = ::cambiarModo,
         )
+    }
+
+    // Varios locales en la wifi (o el guardado no está): hay que decir con cuál conectarse.
+    (Conexion.estado as? EstadoConexion.ElegirLocal)?.let { elegir ->
+        if (pantalla != Pantalla.ACTUALIZACION && pantalla != Pantalla.AJUSTES) {
+            DialogoElegirLocal(
+                estado = elegir,
+                alElegir = { Conexion.elegir(it, ajustes) },
+                alBuscarDeNuevo = { Conexion.arrancar(contexto, ajustes) },
+            )
+        }
     }
 }

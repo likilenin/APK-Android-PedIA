@@ -33,9 +33,52 @@ data class Producto(
     val alergenos: List<String> = emptyList(),
     /** 1 = el dueño ha revisado los alérgenos de este producto; 0 = lo cargado es, como mucho, un borrador. */
     @SerialName("alergenos_revisados") val alergenosRevisados: Int = 0,
+    /** Extras con suplemento que se pueden añadir ("extra de bacón +1,40 €"), de su grupo «Ingredientes extra» o de su familia. */
+    @SerialName("extras_disponibles") val extrasDisponibles: List<ExtraProducto> = emptyList(),
+    /** Nombres propios y orden de los pasos fijos del carrusel de pedido (los configura el dueño en PedIA). */
+    @SerialName("titulos_pasos") val titulosPasos: TitulosPasos = TitulosPasos(),
 ) {
     val estaDisponible get() = disponible == 1
     val esMenu get() = grupos.isNotEmpty()
+
+    /**
+     * Grupos que son un paso del carrusel. El grupo «Ingredientes extra» opcional no lo es cuando el producto tiene
+     * sus extras en el paso «Añadir extra» (así lo hace PedIA).
+     */
+    val gruposVisibles
+        get() = grupos.filterNot { g -> extrasDisponibles.isNotEmpty() && !g.obligatorio && claveTexto(g.nombre) == "ingredientes extra" }
+
+    /** ¿Hay algo que elegir, quitar o añadir? Si no, se pide con un toque, sin abrir el carrusel. */
+    val tieneAsistente
+        get() = gruposVisibles.isNotEmpty() || opciones.isNotEmpty() || ingredientesQuitables.isNotEmpty() || extrasDisponibles.isNotEmpty()
+}
+
+@Serializable
+data class ExtraProducto(val texto: String, val suplemento: Long = 0)
+
+/** Los pasos fijos del carrusel de un producto: nombre propio de cada uno y orden de todos los pasos ("#" = el siguiente grupo). */
+@Serializable
+data class TitulosPasos(
+    val ingredientes: String? = null,
+    val extras: String? = null,
+    val opciones: String? = null,
+    val orden: List<String> = emptyList(),
+)
+
+/** Un grupo que solo sale si en otro grupo (anterior) se ha elegido cierta opción (por nombres). */
+@Serializable
+data class SoloSi(val grupo: String, val opcion: String)
+
+/** "Bacón" x2 -> "doble extra bacón"; x1 -> "extra bacón". Es el texto que PedIA escribe en la nota de la línea (sin el importe). */
+fun textoExtra(texto: String, veces: Int): String {
+    val base = (if (Regex("^extra\\b", RegexOption.IGNORE_CASE).containsMatchIn(texto)) texto else "extra $texto").lowercase()
+    val prefijo = when {
+        veces <= 1 -> ""
+        veces == 2 -> "doble "
+        veces == 3 -> "triple "
+        else -> "${veces}x "
+    }
+    return prefijo + base
 }
 
 @Serializable
@@ -45,6 +88,7 @@ data class GrupoProducto(
     val obligatorio: Boolean = true,
     @SerialName("max_selecciones") val maxSelecciones: Int = 1,
     val opciones: List<OpcionGrupo> = emptyList(),
+    @SerialName("solo_si") val soloSi: SoloSi? = null,
 )
 
 @Serializable
@@ -157,15 +201,21 @@ data class LineaCarrito(
     val quitados: Map<Long, Set<String>> = emptyMap(),
     /** ...y lo que el camarero ha escrito con sus palabras ("sin pan"). Todo ello ya va dentro de [notas]. */
     val notaLibre: String = "",
+    /** Extras con suplemento y cuántas veces (texto → veces). PedIA suma su precio y los escribe en la nota. */
+    val extras: Map<String, Int> = emptyMap(),
 ) {
-    /** Se puede abrir su ficha para cambiar lo elegido o quitar ingredientes. */
-    val editable get() = producto.esMenu || producto.opciones.isNotEmpty()
+    /** Se puede abrir su carrusel para cambiar lo elegido, quitar ingredientes o añadir extras. */
+    val editable get() = producto.tieneAsistente
     private val opcionesElegidas get() = producto.grupos.flatMap { it.opciones }.filter { it.id in selecciones }
     val suplemento get() = opcionesElegidas.sumOf { it.suplemento }
-    val precioUnidad get() = producto.precio + suplemento
-    /** Lo elegido del menú y las notas, para enseñarlo en pantalla ("Cocacola, Patatas deluxe, sin queso"). */
-    val detalle get() = (opcionesElegidas.map { it.texto } + listOfNotNull(notas.ifBlank { null })).joinToString(", ")
-    val clave get() = "${producto.id}|${selecciones.sorted().joinToString(",")}|$notas"
+    private val suplementoExtras
+        get() = extras.entries.sumOf { (texto, veces) -> (producto.extrasDisponibles.firstOrNull { it.texto == texto }?.suplemento ?: 0L) * veces }
+    val precioUnidad get() = producto.precio + suplemento + suplementoExtras
+    /** Lo elegido del menú, los extras y las notas, para enseñarlo en pantalla ("Cocacola, sin queso, extra bacón"). */
+    val detalle
+        get() = (opcionesElegidas.map { it.texto } + extras.map { (t, n) -> textoExtra(t, n) } + listOfNotNull(notas.ifBlank { null }))
+            .joinToString(", ")
+    val clave get() = "${producto.id}|${selecciones.sorted().joinToString(",")}|$notas|${extras.entries.sortedBy { it.key }.joinToString(",") { "${it.key}x${it.value}" }}"
     val subtotal get() = precioUnidad * cantidad
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,34 +39,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pedia.movil.BuildConfig
 import com.pedia.movil.datos.Ajustes
+import com.pedia.movil.datos.Conexion
+import com.pedia.movil.datos.EstadoConexion
 import com.pedia.movil.datos.Modo
 import com.pedia.movil.datos.mensajeUsuario
 
 @Composable
 fun PantallaInicio(ajustes: Ajustes, alElegirModo: (Modo) -> Unit, alAbrirAjustes: () -> Unit) {
-    var conexion by remember { mutableStateOf<String?>(null) }
-    var conectado by remember { mutableStateOf<Boolean?>(null) }
-
-    LaunchedEffect(Unit) {
-        if (!ajustes.servidorConfigurado) {
-            conectado = false
-            conexion = "Falta configurar dónde está PedIA. Entra en Ajustes y pulsa «Buscar PedIA en la wifi»."
-            return@LaunchedEffect
-        }
-        try {
-            val carta = ajustes.api().cargarCarta()
-            conectado = true
-            conexion = "Conectado con ${carta.nombreLocal} (${ajustes.servidorIp})"
-        } catch (e: Exception) {
-            conectado = false
-            conexion = e.mensajeUsuario()
-        }
+    val contexto = LocalContext.current
+    // La conexión con el local se hace sola al arrancar la app (ver Conexion): aquí solo se enseña cómo va.
+    val (conectado, conexion) = when (val e = Conexion.estado) {
+        is EstadoConexion.Buscando -> null to e.texto
+        is EstadoConexion.Conectado -> true to "Conectado con ${e.nombre ?: "PedIA"} (${e.ip})"
+        is EstadoConexion.ElegirLocal -> null to "Elige con qué local quieres conectarte"
+        is EstadoConexion.Sin -> false to e.mensaje
     }
 
     Box(
@@ -128,6 +122,9 @@ fun PantallaInicio(ajustes: Ajustes, alElegirModo: (Modo) -> Unit, alAbrirAjuste
                     Spacer(Modifier.width(10.dp))
                     Text(it, color = Color.White.copy(alpha = 0.85f))
                 }
+            }
+            if (Conexion.estado is EstadoConexion.Sin) {
+                TextButton(onClick = { Conexion.arrancar(contexto, ajustes) }) { Text("Buscar de nuevo", color = Color.White) }
             }
             Spacer(Modifier.height(16.dp))
             Text("Versión ${BuildConfig.VERSION_NAME}", color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp)

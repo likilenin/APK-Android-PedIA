@@ -187,6 +187,8 @@ class PediaApi(private val urlBase: String) {
         if (linea.notas.isNotBlank()) put("notas", linea.notas)
         // Menús: PedIA calcula el precio y el texto de la línea a partir de las opciones elegidas.
         if (linea.selecciones.isNotEmpty()) putJsonArray("selecciones") { linea.selecciones.forEach { add(it) } }
+        // Extras con suplemento: una vez por cada vez que se piden; PedIA suma el precio y escribe la nota ("doble extra bacón").
+        if (linea.extras.isNotEmpty()) putJsonArray("extras") { linea.extras.forEach { (texto, veces) -> repeat(veces) { add(texto) } } }
     }
 
     /**

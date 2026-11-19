@@ -1,5 +1,6 @@
 package com.pedia.movil.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,20 @@ fun TemaPedia(contenido: @Composable () -> Unit) {
     val densidad = Density(base.density * (if (esMovil()) ESCALA_MOVIL else 1f), minOf(base.fontScale, 1f))
     CompositionLocalProvider(LocalDensity provides densidad) {
         MaterialTheme(colorScheme = colores, content = contenido)
+    }
+}
+
+/**
+ * Ventana a pantalla completa (el carrusel de un producto en el camarero): el fondo cubre toda la pantalla, también
+ * bajo la barra de estado, y el contenido deja el margen de las barras del sistema y del teclado.
+ */
+@Composable
+fun VentanaCompleta(alCerrar: () -> Unit, contenido: @Composable () -> Unit) {
+    val densidad = LocalDensity.current
+    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        CompositionLocalProvider(LocalDensity provides densidad) {
+            Box(Modifier.fillMaxSize().background(Crema).windowInsetsPadding(WindowInsets.safeDrawing)) { contenido() }
+        }
     }
 }
 

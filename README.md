@@ -37,7 +37,10 @@ Ajustes abre directamente. El PIN (de fábrica: `1234`) solo se pide en el kiosk
 ## Puesta en marcha
 
 1. Instalar el APK en la tablet o el móvil (permitir «instalar apps de origen desconocido»).
-2. Abrir la app, elegir el modo. La primera vez lleva a Ajustes: **Buscar PedIA en la wifi** (o
+2. Abrir la app: se conecta sola con el local de la wifi y carga las cartas. Con un local ya guardado, se
+   conecta a él directamente (aunque haya cambiado de dirección: lo reconoce por su nombre); si no hay
+   ninguno guardado o no está, busca PedIA por la red y, si encuentra varios, pregunta con cuál conectarse.
+   Después, elegir el modo. Por si hace falta a mano, Ajustes: **Buscar PedIA en la wifi** (o
    escribir la IP del ordenador de PedIA) y **Probar conexión**.
 3. En el ordenador de PedIA, el cortafuegos de Windows tiene que permitir PedIA en *redes
    privadas* (Windows lo pregunta la primera vez que se abre PedIA). Si la búsqueda no la

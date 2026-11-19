@@ -97,6 +97,9 @@ import com.pedia.movil.datos.ingredientesQuitables
 import com.pedia.movil.datos.textoSin
 import com.pedia.movil.ui.DialogoAlergenos
 import com.pedia.movil.ui.QuitarIngredientes
+import com.pedia.movil.ui.VentanaCompleta
+import com.pedia.movil.ui.kiosco.AsistenteProducto
+import com.pedia.movil.ui.kiosco.ModoAsistente
 import com.pedia.movil.datos.ZonaMesas
 import com.pedia.movil.ui.AvisoError
 import com.pedia.movil.ui.AzulPedia
@@ -386,7 +389,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avis
             }
             Box(Modifier.weight(1f)) {
                 if (pestana == 0) CartaRapida(vm, ajustes, Modifier.fillMaxSize())
-                else PanelComanda(vm, pedido)
+                else PanelComanda(vm, ajustes, pedido)
             }
             BarraEnviar(vm)
         }
@@ -473,6 +476,8 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
     }
     var categoria by remember { mutableStateOf(carta.categorias.firstOrNull()?.id) }
     var busqueda by remember { mutableStateOf("") }
+    // Con algo que elegir, quitar o añadir se abre el carrusel paso a paso; el resto, un cuadro con la nota.
+    var carrusel by remember { mutableStateOf<Producto?>(null) }
     var detalle by remember { mutableStateOf<Producto?>(null) }
     val vibrar = LocalHapticFeedback.current
     val api = remember(ajustes.urlBase) { ajustes.api() }
@@ -533,11 +538,11 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
                             onClick = {
                                 vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 // Un menú hay que elegirlo (bebida, patatas...): abre su ficha.
-                                if (producto.esMenu) detalle = producto else vm.anadir(producto)
+                                if (producto.tieneAsistente) carrusel = producto else vm.anadir(producto)
                             },
                             onLongClick = {
                                 vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
-                                detalle = producto
+                                if (producto.tieneAsistente) carrusel = producto else detalle = producto
                             },
                         ),
                 ) {
@@ -566,30 +571,33 @@ private fun CartaRapida(vm: CamareroVM, ajustes: Ajustes, modifier: Modifier) {
         }
     }
 
-    detalle?.let { producto ->
-        if (producto.esMenu) {
-            FichaMenuCamarero(
+    carrusel?.let { producto ->
+        VentanaCompleta(alCerrar = { carrusel = null }) {
+            AsistenteProducto(
                 producto = producto,
                 carta = carta,
-                alGuardar = { linea -> vm.anadir(linea); detalle = null },
-                alCerrar = { detalle = null },
-            )
-        } else {
-            DialogoProducto(
-                producto = producto,
-                urlFoto = api.urlFoto(producto.fotoPath),
-                textoBoton = "Añadir",
-                permitirNota = true,
-                alAnadir = { cantidad, notas -> vm.anadir(producto, cantidad, notas); detalle = null },
-                alCerrar = { detalle = null },
-                carta = carta,
+                api = api,
+                modo = ModoAsistente.CAMARERO,
+                alTerminar = { principal, _ -> vm.anadir(principal); carrusel = null },
+                alCerrar = { carrusel = null },
             )
         }
+    }
+    detalle?.let { producto ->
+        DialogoProducto(
+            producto = producto,
+            urlFoto = api.urlFoto(producto.fotoPath),
+            textoBoton = "Añadir",
+            permitirNota = true,
+            alAnadir = { cantidad, notas -> vm.anadir(producto, cantidad, notas); detalle = null },
+            alCerrar = { detalle = null },
+            carta = carta,
+        )
     }
 }
 
 @Composable
-private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
+private fun PanelComanda(vm: CamareroVM, ajustes: Ajustes, pedido: Pedido?) {
     var itemElegido by remember { mutableStateOf<ItemPedido?>(null) }
     var lineaEditada by remember { mutableStateOf<LineaCarrito?>(null) }
     var itemEditado by remember { mutableStateOf<ItemPedido?>(null) }
@@ -634,16 +642,20 @@ private fun PanelComanda(vm: CamareroVM, pedido: Pedido?) {
 
     lineaEditada?.let { linea ->
         val carta = vm.carta
-        if (linea.producto.esMenu && carta != null) {
-            // Un menú se edita en su ficha: se puede cambiar lo elegido (la bebida, las patatas...), no solo el texto.
-            FichaMenuCamarero(
-                producto = linea.producto,
-                carta = carta,
-                linea = linea,
-                alGuardarSoloUna = { vm.editarLinea(linea.clave, it, soloUna = true); lineaEditada = null },
-                alGuardar = { vm.editarLinea(linea.clave, it, soloUna = false); lineaEditada = null },
-                alCerrar = { lineaEditada = null },
-            )
+        if (linea.producto.tieneAsistente && carta != null) {
+            // Se edita en el mismo carrusel con lo que ya estaba elegido: cambiar la bebida, quitar un ingrediente, un extra...
+            VentanaCompleta(alCerrar = { lineaEditada = null }) {
+                AsistenteProducto(
+                    producto = linea.producto,
+                    carta = carta,
+                    api = ajustes.api(),
+                    linea = linea,
+                    modo = ModoAsistente.CAMARERO,
+                    alGuardarSoloUna = { vm.editarLinea(linea.clave, it, soloUna = true); lineaEditada = null },
+                    alTerminar = { principal, _ -> vm.editarLinea(linea.clave, principal, soloUna = false); lineaEditada = null },
+                    alCerrar = { lineaEditada = null },
+                )
+            }
         } else {
             DialogoNota(
                 nombre = linea.producto.nombre,

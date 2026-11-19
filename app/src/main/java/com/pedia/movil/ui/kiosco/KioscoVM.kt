@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.datos.Carta
+import com.pedia.movil.datos.Cartas
 import com.pedia.movil.datos.ErrorPedia
 import com.pedia.movil.datos.LineaCarrito
 import com.pedia.movil.datos.Pedido
@@ -35,10 +36,9 @@ enum class EstadoImpresion { SIN_IMPRESORA, IMPRIMIENDO, IMPRESO, ERROR }
 private const val MS_SONDEO_PAGO = 2500L
 
 class KioscoVM(private val ajustes: Ajustes, private val contexto: Context) : ViewModel() {
-    var carta by mutableStateOf<Carta?>(null)
-        private set
-    var errorCarta by mutableStateOf<String?>(null)
-        private set
+    /** La carta del canal «kiosco» de PedIA (ya cargada al arrancar la app; ver Cartas). */
+    val carta get() = Cartas.kiosco.carta
+    val errorCarta get() = Cartas.kiosco.error
     var paso by mutableStateOf(PasoKiosco.BIENVENIDA)
         private set
     var paraLlevar by mutableStateOf(false)
@@ -80,18 +80,7 @@ class KioscoVM(private val ajustes: Ajustes, private val contexto: Context) : Vi
 
     // La carta se vuelve a pedir a PedIA con cada cliente: así un producto que se
     // marca como agotado en el TPV desaparece del kiosko enseguida.
-    fun recargarCarta() {
-        viewModelScope.launch {
-            try {
-                val nueva = api.cargarCarta(canal = "kiosco")
-                carta = nueva
-                errorCarta = null
-                if (nueva.categorias.none { it.id == categoria }) categoria = nueva.categorias.firstOrNull()?.id
-            } catch (e: Exception) {
-                errorCarta = e.mensajeUsuario()
-            }
-        }
-    }
+    fun recargarCarta() = Cartas.cargarKiosco(ajustes)
 
     fun empezar(llevar: Boolean) {
         paraLlevar = llevar

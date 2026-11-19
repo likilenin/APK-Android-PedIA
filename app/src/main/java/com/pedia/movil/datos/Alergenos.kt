@@ -28,7 +28,8 @@ val ALERGENOS = listOf(
 /** Lo que se guarda en la nota de la línea cuando se quita un ingrediente: "sin queso". No cambia el precio. */
 fun textoSin(ingrediente: String) = "sin ${ingrediente.trim().lowercase()}"
 
-private fun sinTildes(texto: String) =
+/** Sin mayúsculas, tildes ni espacios sobrantes: "  Lácteos " y "lacteos" son lo mismo. */
+fun claveTexto(texto: String) =
     Normalizer.normalize(texto, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase().replace(Regex("\\s+"), " ").trim()
 
 /**
@@ -37,7 +38,7 @@ private fun sinTildes(texto: String) =
  * producto entero no es quitar un ingrediente). Igual que en PedIA.
  */
 val Producto.ingredientesQuitables: List<String>
-    get() = ingredientes.filter { sinTildes(it) != sinTildes(nombre) }
+    get() = ingredientes.filter { claveTexto(it) != claveTexto(nombre) }
 
 /** Un producto (o una opción de menú que es un producto de la carta) con lo que lleva. */
 class ParteAlergenos(val nombre: String, val ingredientes: List<String>, val alergenos: List<Alergeno>)

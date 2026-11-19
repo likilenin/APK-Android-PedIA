@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.datos.Carta
+import com.pedia.movil.datos.EstadoConexion
+import com.pedia.movil.datos.PediaEncontrada
 import com.pedia.movil.datos.InfoAlergenos
 import com.pedia.movil.datos.infoAlergenos
 import com.pedia.movil.datos.ingredientesQuitables
@@ -287,6 +289,37 @@ fun DialogoProducto(
         }
     }
     if (verAlergenos) DialogoAlergenos(producto.nombre, infoAlergenos(producto, carta, emptyList())) { verAlergenos = false }
+}
+
+/** Se han encontrado varios locales con PedIA en la wifi (o no está el guardado): hay que decir con cuál conectarse. */
+@Composable
+fun DialogoElegirLocal(estado: EstadoConexion.ElegirLocal, alElegir: (PediaEncontrada) -> Unit, alBuscarDeNuevo: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("¿Con qué local quieres conectarte?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (estado.guardado != null) "No se encuentra «${estado.guardado}» en la wifi. Estos son los locales que hay:"
+                    else "Se han encontrado varios locales en la wifi:",
+                    fontSize = 15.sp,
+                )
+                estado.locales.forEach { local ->
+                    OutlinedButton(
+                        onClick = { alElegir(local) },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    ) {
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                            Text(local.nombreLocal ?: "PedIA", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("${local.ip}:${local.puerto}", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = alBuscarDeNuevo) { Text("Buscar de nuevo") } },
+    )
 }
 
 /**

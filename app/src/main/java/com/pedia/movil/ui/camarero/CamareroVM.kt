@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pedia.movil.datos.Ajustes
 import com.pedia.movil.datos.Carta
+import com.pedia.movil.datos.Cartas
 import com.pedia.movil.datos.ItemPedido
 import com.pedia.movil.datos.LineaCarrito
 import com.pedia.movil.datos.Pedido
@@ -20,10 +21,9 @@ import com.pedia.movil.datos.sustituir
 import kotlinx.coroutines.launch
 
 class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
-    var carta by mutableStateOf<Carta?>(null)
-        private set
-    var errorCarta by mutableStateOf<String?>(null)
-        private set
+    /** La carta del local (canal «barra» de PedIA), ya cargada al arrancar la app; ver Cartas. */
+    val carta get() = Cartas.local.carta
+    val errorCarta get() = Cartas.local.error
 
     /** Pedido abierto de cada mesa ocupada (el más reciente, como hace PedIA). */
     var pedidosPorMesa by mutableStateOf<Map<String, Pedido>>(emptyMap())
@@ -51,16 +51,7 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
 
     private val api get() = ajustes.api()
 
-    fun cargarCarta() {
-        viewModelScope.launch {
-            try {
-                carta = api.cargarCarta()
-                errorCarta = null
-            } catch (e: Exception) {
-                errorCarta = e.mensajeUsuario()
-            }
-        }
-    }
+    fun cargarCarta() = Cartas.cargarLocal(ajustes)
 
     suspend fun refrescarMesas() {
         try {

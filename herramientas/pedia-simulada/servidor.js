@@ -6,7 +6,9 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 
-const PUERTO = 4100; // distinto de 4000 para no chocar con la PedIA real
+// Varias PedIA simuladas a la vez (para probar la elección de local): PUERTO=4101 LOCAL='Otro local' node servidor.js
+const PUERTO = Number(process.env.PUERTO) || 4100; // distinto de 4000 para no chocar con la PedIA real
+const NOMBRE_LOCAL = process.env.LOCAL || 'Burger Pryto';
 const CARPETA = __dirname;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -24,9 +26,13 @@ const P = (categoria_id, nombre, precio, extra = {}) => ({
 });
 const productos = [
   P(1, 'Hamburguesa clásica', 950, { descripcion: 'Ternera, lechuga, tomate y salsa de la casa', opciones: ['sin queso', 'sin cebolla', 'sin pepinillo', 'poco hecha'], ingredientes: ['Ternera', 'Lechuga', 'Tomate', 'Salsa de la casa', 'Queso'], alergenos: ['gluten', 'huevo', 'lacteos', 'sesamo'], alergenos_revisados: 1 }),
-  P(1, 'Hamburguesa doble con bacon', 1290, { opciones: ['sin queso', 'sin bacon'] }),
-  P(1, 'Hamburguesa vegetal', 1050),
-  P(2, 'Pizza margarita', 1100, { ingredientes: ['Tomate', 'Mozzarella'], alergenos: ['gluten', 'lacteos'] }),
+  P(1, 'Hamburguesa doble con bacon', 1290, { opciones: ['poco hecha', 'bien hecha'], ingredientes: ['Carne', 'Bacon', 'Queso'] }),
+  P(1, 'Hamburguesa vegetal', 1050, { canal_kiosco: 0 }), // solo en la carta del local
+  P(2, 'Pizza margarita', 1100, {
+    ingredientes: ['Tomate', 'Mozzarella'], alergenos: ['gluten', 'lacteos'],
+    extras_disponibles: [{ texto: 'Extra de mozzarella', suplemento: 120 }, { texto: 'Bacón', suplemento: 140 }],
+    titulos_pasos: { extras: 'Pon extra', orden: ['extras', 'ingredientes', 'opciones'] }, // el paso de extras va primero y con otro nombre
+  }),
   P(2, 'Pizza barbacoa', 1350, { opciones: ['sin cebolla', 'extra de queso'] }),
   P(2, 'Pizza cuatro quesos', 1300, { disponible: 0 }),
   P(3, 'Coca-Cola', 250),
@@ -34,10 +40,20 @@ const productos = [
   P(3, 'Cerveza', 300),
   P(4, 'Tarta de queso', 550),
   P(4, 'Helado', 400),
+  P(4, 'Menú Infantil', 700, { canal_barra: 0, ingredientes: ['Nuggets', 'Patatas'] }), // solo en la carta del kiosko
   P(9, 'Pedido telefónico (automático)', 0, { disponible: 0 }),
   P(5, 'Menú Hamburguesa', 900, {
     descripcion: 'Hamburguesa, patatas y bebida',
     grupos: [
+      { id: 4, nombre: 'Tamaño', obligatorio: true, max_selecciones: 1, opciones: [
+        { id: 41, texto: 'Normal', suplemento: 0, producto_id: null, agotada: false },
+        { id: 42, texto: 'Grande', suplemento: 150, producto_id: null, agotada: false },
+      ] },
+      // Paso condicionado: solo sale si en «Tamaño» se elige «Grande».
+      { id: 5, nombre: 'Salsa de la grande', obligatorio: true, max_selecciones: 1, solo_si: { grupo: 'Tamaño', opcion: 'Grande' }, opciones: [
+        { id: 51, texto: 'Salsa brava', suplemento: 0, producto_id: null, agotada: false },
+        { id: 52, texto: 'Salsa rosa', suplemento: 0, producto_id: null, agotada: false },
+      ] },
       { id: 1, nombre: 'Hamburguesa', obligatorio: true, max_selecciones: 1, opciones: [
         { id: 11, texto: 'Hamburguesa clásica', suplemento: 0, producto_id: null, agotada: false },
         { id: 12, texto: 'Doble carne', suplemento: 200, producto_id: 2, agotada: false },
@@ -57,7 +73,7 @@ const productos = [
 ];
 for (const p of productos) if (!p.grupos) p.grupos = [];
 const config = [
-  { clave: 'local_nombre', valor: 'Burger Pryto', cifrado: false },
+  { clave: 'local_nombre', valor: NOMBRE_LOCAL, cifrado: false },
   // Mesas por zonas, como PedIA: T1..T4 (terraza), S1..S6 (salón) y B1..B3 (barra). mesas_cantidad es la suma.
   { clave: 'mesas_terraza', valor: '4', cifrado: false },
   { clave: 'mesas_salon', valor: '6', cifrado: false },
@@ -81,8 +97,17 @@ const linea = (it) => {
   const elegidas = prod.grupos.flatMap((g) => g.opciones).filter((o) => (it.selecciones || []).includes(o.id));
   const faltan = prod.grupos.filter((g) => g.obligatorio && !g.opciones.some((o) => elegidas.includes(o)));
   if (faltan.length) throw Object.assign(new Error(`Falta elegir: ${faltan.map((g) => g.nombre).join(', ')}`), { status: 400 });
-  const notas = [...elegidas.map((o) => o.texto), ...(it.notas ? [it.notas] : [])].join(', ') || null;
-  const precio = prod.precio + elegidas.reduce((s, o) => s + o.suplemento, 0);
+  // Extras con suplemento ("extra bacón +1,40 €", "doble extra bacón +2,80 €"): cada texto repetido es una vez más.
+  const veces = new Map();
+  for (const e of it.extras || []) veces.set(e, (veces.get(e) || 0) + 1);
+  const extras = [...veces].map(([texto, n]) => ({ texto, n, def: (prod.extras_disponibles || []).find((x) => x.texto === texto) }));
+  const textoExtra = ({ texto, n, def }) => {
+    const base = /^extra\b/i.test(texto) ? texto.toLowerCase() : `extra ${texto}`.toLowerCase();
+    const importe = def ? def.suplemento * n : 0;
+    return `${n === 2 ? 'doble ' : n === 3 ? 'triple ' : n > 3 ? `${n}x ` : ''}${base}${importe ? ` +${(importe / 100).toFixed(2).replace('.', ',')} €` : ''}`;
+  };
+  const notas = [...elegidas.map((o) => o.texto), ...(it.notas ? [it.notas] : []), ...extras.map(textoExtra)].join(', ') || null;
+  const precio = prod.precio + elegidas.reduce((s, o) => s + o.suplemento, 0) + extras.reduce((s, e) => s + (e.def ? e.def.suplemento * e.n : 0), 0);
   return { id: siguienteItem++, producto_id: prod.id, cantidad: it.cantidad || 1, precio_unitario: precio, notas, producto_nombre: prod.nombre, producto_iva_porcentaje: null };
 };
 
@@ -161,7 +186,10 @@ const servidor = http.createServer((req, res) => {
         return responder(res, 200, { ok: true });
       }
       if (ruta === '/api/categorias') return responder(res, 200, categorias);
-      if (ruta === '/api/productos') return responder(res, 200, productos);
+      if (ruta === '/api/productos') {
+        const canal = (url.searchParams.get('canal') || '').toLowerCase();
+        return responder(res, 200, canal ? productos.filter((p) => p[`canal_${canal}`] !== 0) : productos);
+      }
       if (ruta === '/api/config') return responder(res, 200, config);
       if (ruta === '/api/pedidos' && req.method === 'GET') {
         const estados = (url.searchParams.get('estados') || '').split(',').filter(Boolean);
@@ -243,4 +271,4 @@ net.createServer((socket) => {
     const texto = Buffer.from(datos.filter((b) => b === 0x0a || (b >= 0x20 && b !== 0x7f))).toString('latin1');
     log(`>>> TICKET IMPRESO (${datos.length} bytes) -> ${nombre}\n${texto}`);
   });
-}).listen(9100, () => log('Impresora simulada en :9100'));
+}).listen(Number(process.env.PUERTO_IMPRESORA) || 9100, () => log('Impresora simulada'));

@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.net.Inet4Address
 
-data class PediaEncontrada(val ip: String, val nombreLocal: String?)
+data class PediaEncontrada(val ip: String, val puerto: Int, val nombreLocal: String?)
 
 /** IPv4 de este dispositivo en la red actual (la wifi), o null si no hay red. */
 fun ipLocal(contexto: Context): String? {
@@ -22,20 +22,24 @@ fun ipLocal(contexto: Context): String? {
         .firstOrNull { !it.isLoopbackAddress }?.hostAddress
 }
 
-// Busca PedIA en la wifi: prueba /api/health en el puerto indicado de todas las
+suspend fun buscarPedia(contexto: Context, puerto: Int, alAvanzar: (Float) -> Unit): List<PediaEncontrada> =
+    buscarPedia(contexto, listOf(puerto, 4000).distinct(), alAvanzar)
+
+// Busca PedIA en la wifi: prueba /api/health en los puertos indicados de todas las
 // direcciones de la red (x.x.x.1 a x.x.x.254). No hace falta configurar nada en PedIA.
-suspend fun buscarPedia(contexto: Context, puerto: Int, alAvanzar: (Float) -> Unit): List<PediaEncontrada> {
+suspend fun buscarPedia(contexto: Context, puertos: List<Int>, alAvanzar: (Float) -> Unit): List<PediaEncontrada> {
     val propia = ipLocal(contexto) ?: return emptyList()
     val prefijo = propia.substringBeforeLast('.')
     val limite = Semaphore(48)
+    val total = 254 * puertos.size
     var hechas = 0
     return withContext(Dispatchers.IO) {
         coroutineScope {
-            (1..254).map { n ->
+            (1..254).flatMap { n -> puertos.map { puerto -> n to puerto } }.map { (n, puerto) ->
                 async {
                     val ip = "$prefijo.$n"
-                    val encontrada = limite.withPermit { if (ip == propia) null else probar(ip, puerto) }
-                    synchronized(limite) { hechas++; alAvanzar(hechas / 254f) }
+                    val encontrada = limite.withPermit { if (ip == propia) null else sondear(ip, puerto) }
+                    synchronized(limite) { hechas++; alAvanzar(hechas / total.toFloat()) }
                     encontrada
                 }
             }.awaitAll().filterNotNull()
@@ -43,13 +47,18 @@ suspend fun buscarPedia(contexto: Context, puerto: Int, alAvanzar: (Float) -> Un
     }
 }
 
-private suspend fun probar(ip: String, puerto: Int): PediaEncontrada? {
+/**
+ * ¿Hay un PedIA en esta dirección y puerto? Con el nombre de su local, si lo dice. [rapido]: esperar poco (al buscar
+ * por toda la red); con una sola dirección que probar, como la del local guardado, se espera lo normal.
+ */
+suspend fun sondear(ip: String, puerto: Int, rapido: Boolean = true): PediaEncontrada? = withContext(Dispatchers.IO) {
+    val cliente = if (rapido) PediaApi.httpRapido else PediaApi.http
     val ok = runCatching {
-        PediaApi.httpRapido.newCall(Request.Builder().url("http://$ip:$puerto/api/health").build()).execute().use {
+        cliente.newCall(Request.Builder().url("http://$ip:$puerto/api/health").build()).execute().use {
             it.isSuccessful && it.body?.string().orEmpty().contains("\"ok\"")
         }
     }.getOrDefault(false)
-    if (!ok) return null
+    if (!ok) return@withContext null
     val nombre = runCatching { PediaApi("http://$ip:$puerto").configuracion()["local_nombre"] }.getOrNull()
-    return PediaEncontrada(ip, nombre?.takeIf { it.isNotBlank() })
+    PediaEncontrada(ip, puerto, nombre?.takeIf { it.isNotBlank() })
 }
