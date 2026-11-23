@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pedia.movil.datos.Ajustes
+import com.pedia.movil.datos.Camarero
 import com.pedia.movil.datos.Carta
 import com.pedia.movil.datos.Cartas
 import com.pedia.movil.datos.ItemPedido
@@ -46,12 +47,88 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
     var ocupado by mutableStateOf(false)
         private set
 
+    /** Camareros de PedIA (Ajustes > Personal). Vacía si PedIA no tiene ninguno: se usa el nombre fijo de Ajustes. */
+    var camareros by mutableStateOf<List<Camarero>>(emptyList())
+        private set
+    var errorCamareros by mutableStateOf<String?>(null)
+        private set
+
+    /** Quién está usando ahora el dispositivo (null: nadie elegido o PedIA sin lista de camareros). */
+    var camarero by mutableStateOf<Camarero?>(null)
+        private set
+
+    /** Se enseña «¿Quién eres?» al entrar en el modo camarero y al pulsar «Cambiar de camarero». */
+    var eligiendoCamarero by mutableStateOf(true)
+        private set
+
+    /** Enseñar solo las mesas de este camarero (y las libres). */
+    var soloMias by mutableStateOf(false)
+
     /** Mensaje corto para la barra inferior ("Comanda enviada"...). */
     var aviso by mutableStateOf<String?>(null)
 
     private val api get() = ajustes.api()
 
     fun cargarCarta() = Cartas.cargarLocal(ajustes)
+
+    /** Pide a PedIA los camareros. Sin ninguno (o sin la función), se sigue con el nombre fijo de Ajustes. */
+    suspend fun cargarCamareros() {
+        try {
+            val lista = api.camareros()
+            camareros = lista
+            errorCamareros = null
+            if (lista.isEmpty()) {
+                camarero = null
+                eligiendoCamarero = false
+            } else {
+                // Si ya había uno elegido, se actualiza por si PedIA lo ha cambiado o dado de baja.
+                camarero = camarero?.let { actual -> lista.firstOrNull { it.id == actual.id } }
+            }
+        } catch (e: Exception) {
+            errorCamareros = e.mensajeUsuario()
+        }
+    }
+
+    fun elegirCamarero(elegido: Camarero) {
+        camarero = elegido
+        ajustes.camareroId = elegido.id
+        ajustes.nombreCamarero = elegido.nombre
+        soloMias = false
+        eligiendoCamarero = false
+    }
+
+    fun cambiarDeCamarero() {
+        mesaAbierta = null
+        nuevas.clear()
+        eligiendoCamarero = true
+        soloMias = false
+    }
+
+    /** Sin camarero elegido (no hay conexión con PedIA para ver la lista): se sigue con el nombre fijo de Ajustes. */
+    fun seguirSinElegir() {
+        camarero = null
+        eligiendoCamarero = false
+    }
+
+    /** Al salir del modo camarero: la próxima vez que se entre, otra vez «¿Quién eres?». */
+    fun cerrarSesion() {
+        mesaAbierta = null
+        nuevas.clear()
+        camarero = null
+        eligiendoCamarero = true
+        soloMias = false
+    }
+
+    fun esMia(pedido: Pedido) = camarero != null && pedido.camareroId == camarero?.id
+
+    /** Esta comanda pasa a ser de este camarero (cualquiera puede coger la de otro). */
+    fun cogerComanda(pedido: Pedido) {
+        val yo = camarero ?: return
+        pasarComanda(pedido, yo)
+    }
+
+    fun pasarComanda(pedido: Pedido, a: Camarero) =
+        accion("✓ Comanda de la mesa ${codigoMesa(pedido.mesaNumero) ?: ""} para ${a.nombre}") { api.cambiarCamarero(pedido.id, a.id) }
 
     suspend fun refrescarMesas() {
         try {
@@ -125,8 +202,10 @@ class CamareroVM(private val ajustes: Ajustes) : ViewModel() {
                 refrescarMesas()
                 val existente = pedidosPorMesa[mesa]
                 if (existente == null) {
-                    val notas = ajustes.nombreCamarero.takeIf { it.isNotBlank() }?.let { "Camarero: $it" }
-                    actualizarPedido(api.crearPedido("mesa", mesa, notas, nuevas.toList(), origen = "camarero"))
+                    // Con camarero de PedIA, PedIA ya escribe su nombre en el ticket; si no, va como nota.
+                    val notas = if (camarero != null) null
+                    else ajustes.nombreCamarero.takeIf { it.isNotBlank() }?.let { "Camarero: $it" }
+                    actualizarPedido(api.crearPedido("mesa", mesa, notas, nuevas.toList(), origen = "camarero", camareroId = camarero?.id))
                     nuevas.clear()
                 } else {
                     // Una a una, quitando de la lista lo que ya ha llegado: si algo falla a

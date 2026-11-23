@@ -250,7 +250,7 @@ fun PantallaAjustes(
 
                 Seccion("Modo camarero") {
                     OutlinedTextField(
-                        camarero, { camarero = it }, label = { Text("Nombre del camarero (sale en la comanda)") },
+                        camarero, { camarero = it }, label = { Text("Nombre fijo (solo si PedIA no tiene lista de camareros)") },
                         singleLine = true, modifier = Modifier.fillMaxWidth(),
                     )
                 }

@@ -43,6 +43,11 @@ class Ajustes(contexto: Context) {
         get() = texto("nombre_camarero")
         set(v) = guardarTexto("nombre_camarero", v.trim())
 
+    /** Camarero de PedIA que usa este dispositivo (el último elegido); 0 = ninguno. Su nombre va en [nombreCamarero]. */
+    var camareroId: Long
+        get() = prefs.getLong("camarero_id", 0L)
+        set(v) = prefs.edit().putLong("camarero_id", v).apply()
+
     var impresoraIp: String
         get() = texto("impresora_ip")
         set(v) = guardarTexto("impresora_ip", v.trim())

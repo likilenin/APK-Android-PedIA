@@ -52,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -228,11 +229,13 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
                     // Las dos opciones, centradas en la pantalla. En una pantalla tan baja que no caben ahí sin
                     // tapar el logo, justo debajo de él.
                     val arribaOpciones = maxOf((maxHeight - altoBoton * 2 - separacion) / 2, arribaLogo + altoLogo + 24.dp)
-                    // Logo del local, algo separado del borde.
+                    // Logo del local, algo separado del borde: ocupa todo el hueco que queda sobre las opciones
+                    // (que no se mueven), sin pasarse de un máximo.
+                    val altoLogoFinal = (arribaOpciones - arribaLogo - 20.dp).coerceIn(altoLogo, if (movil) 260.dp else 380.dp)
                     Image(
                         painterResource(R.drawable.logo_local),
                         contentDescription = "Logo del local",
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = arribaLogo).height(altoLogo),
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = arribaLogo).fillMaxWidth().height(altoLogoFinal),
                     )
                     Column(
                         Modifier.fillMaxWidth().padding(top = arribaOpciones),
@@ -240,8 +243,11 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         val tamano = Modifier.widthIn(max = 640.dp).fillMaxWidth().height(altoBoton)
-                        BotonInicio(R.drawable.ic_comer_aqui, "Para tomar aquí", tamano) { vm.empezar(llevar = false) }
-                        BotonInicio(R.drawable.ic_para_llevar, "Para llevar", tamano) { vm.empezar(llevar = true) }
+                        // Misma letra en las dos opciones: la que haga falta para que la más larga quepa en una línea.
+                        var letra by remember { mutableFloatStateOf(if (movil) 30f else 46f) }
+                        val menos = { letra = maxOf(letra * 0.92f, 12f) }
+                        BotonInicio(R.drawable.ic_comer_aqui, "Para tomar aquí", tamano, letra, menos) { vm.empezar(llevar = false) }
+                        BotonInicio(R.drawable.ic_para_llevar, "Para llevar", tamano, letra, menos) { vm.empezar(llevar = true) }
                     }
                 }
                 vm.errorCarta != null -> {
@@ -282,7 +288,7 @@ private fun Bienvenida(vm: KioscoVM, alAbrirMenu: () -> Unit) {
 }
 
 @Composable
-private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifier, alPulsar: () -> Unit) {
+private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifier, letra: Float, alNoCabe: () -> Unit, alPulsar: () -> Unit) {
     val movil = esMovil()
     Surface(
         onClick = alPulsar,
@@ -296,9 +302,17 @@ private fun BotonInicio(@DrawableRes icono: Int, texto: String, modifier: Modifi
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(painterResource(icono), contentDescription = null, tint = FondoOscuro, modifier = Modifier.size(if (movil) 84.dp else 124.dp))
+            Icon(painterResource(icono), contentDescription = null, tint = FondoOscuro, modifier = Modifier.size((if (movil) 84.dp else 124.dp) * maxOf(letra / (if (movil) 30f else 46f), 0.6f)))
             Spacer(Modifier.width(18.dp))
-            Text(texto, fontSize = if (movil) 30.sp else 46.sp, fontWeight = FontWeight.Black, color = FondoOscuro, maxLines = 1)
+            Text(
+                texto,
+                fontSize = letra.sp,
+                fontWeight = FontWeight.Black,
+                color = FondoOscuro,
+                maxLines = 1,
+                softWrap = false,
+                onTextLayout = { if (it.didOverflowWidth) alNoCabe() },
+            )
         }
     }
 }

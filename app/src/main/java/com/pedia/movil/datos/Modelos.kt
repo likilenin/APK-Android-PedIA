@@ -128,10 +128,21 @@ data class Pedido(
     @SerialName("cocina_retenida") val cocinaRetenida: Int = 0,
     val impresion: ImpresionPedido? = null,
     val items: List<ItemPedido> = emptyList(),
+    /** Camarero que cogió la comanda (lista de Ajustes > Personal de PedIA); null si no tiene. */
+    @SerialName("camarero_id") val camareroId: Long? = null,
+    @SerialName("camarero_nombre") val camareroNombre: String? = null,
 ) {
     val pagado get() = estadoPago == "pagado"
     val unidades get() = items.sumOf { it.cantidad }
 }
+
+/** Un camarero de la lista de PedIA (Ajustes > Personal): solo un nombre para saber quién coge cada comanda. */
+@Serializable
+data class Camarero(
+    val id: Long,
+    val nombre: String,
+    val activo: Int = 1,
+)
 
 /** Respuesta de GET /api/pedidos/:id/ticket de PedIA (cuando lo tenga). */
 @Serializable

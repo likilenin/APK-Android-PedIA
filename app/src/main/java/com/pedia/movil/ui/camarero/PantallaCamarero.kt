@@ -3,6 +3,7 @@ package com.pedia.movil.ui.camarero
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -149,11 +150,22 @@ fun PantallaCamarero(ajustes: Ajustes, alAbrirAjustes: () -> Unit, alCambiarModo
         }
     }
 
+    // Mientras se está eligiendo camarero se pide la lista a PedIA; si aún no hay conexión, se reintenta solo.
+    LaunchedEffect(vm.eligiendoCamarero) {
+        while (vm.eligiendoCamarero) {
+            vm.cargarCamareros()
+            if (vm.errorCamareros == null) break
+            delay(3000)
+        }
+    }
+
+    // Al salir del modo camarero, la próxima vez vuelve a preguntar quién es.
+    val salirDelModo = { vm.cerrarSesion(); alCambiarModo() }
     val mesa = vm.mesaAbierta
-    if (mesa == null) {
-        PantallaMesas(vm, ajustes, avisos, alAbrirAjustes, alCambiarModo)
-    } else {
-        PantallaComanda(vm, ajustes, mesa, avisos)
+    when {
+        vm.eligiendoCamarero -> PantallaElegirCamarero(vm, ajustes, alAbrirAjustes, salirDelModo)
+        mesa == null -> PantallaMesas(vm, ajustes, avisos, alAbrirAjustes, salirDelModo)
+        else -> PantallaComanda(vm, ajustes, mesa, avisos)
     }
 }
 
@@ -183,13 +195,22 @@ private fun PantallaMesas(
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = FondoOscuro, titleContentColor = Color.White, actionIconContentColor = Color.White),
                 title = {
-                    Column {
-                        Text("Mesas", fontWeight = FontWeight.Bold)
-                        Text(
-                            listOfNotNull(carta?.nombreLocal, ajustes.nombreCamarero.ifBlank { null }).joinToString(" · "),
-                            fontSize = 14.sp,
-                            color = Color.White.copy(alpha = 0.7f),
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        // Tocar el nombre es lo más rápido para cambiar de camarero.
+                        modifier = if (vm.camareros.isNotEmpty()) Modifier.clip(RoundedCornerShape(12.dp)).clickable { vm.cambiarDeCamarero() } else Modifier,
+                    ) {
+                        vm.camarero?.let { InsigniaCamarero(it.id, it.nombre, tamano = 32.dp); Spacer(Modifier.width(10.dp)) }
+                        Column {
+                            Text("Mesas", fontWeight = FontWeight.Bold)
+                            Text(
+                                listOfNotNull(carta?.nombreLocal, (vm.camarero?.nombre ?: ajustes.nombreCamarero).ifBlank { null }).joinToString(" · "),
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -198,6 +219,7 @@ private fun PantallaMesas(
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menú") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (vm.camareros.isNotEmpty()) DropdownMenuItem(text = { Text("Cambiar de camarero") }, onClick = { menu = false; vm.cambiarDeCamarero() })
                             DropdownMenuItem(text = { Text("Recargar carta") }, onClick = { menu = false; vm.cargarCarta() })
                             DropdownMenuItem(text = { Text("Ajustes") }, onClick = { menu = false; alAbrirAjustes() })
                             DropdownMenuItem(text = { Text("Cambiar de modo") }, onClick = { menu = false; alCambiarModo() })
@@ -211,6 +233,17 @@ private fun PantallaMesas(
             vm.errorConexion?.let { Box(Modifier.padding(12.dp)) { AvisoError(it) } }
             vm.errorCarta?.let { if (carta == null) Box(Modifier.padding(12.dp)) { AvisoError(it, vm::cargarCarta) } }
             Leyenda(vm.pedidosPorMesa.keys.count { it in conocidas }, conocidas.size)
+            vm.camarero?.let { yo ->
+                val mias = vm.pedidosPorMesa.values.count { it.camareroId == yo.id }
+                Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(
+                        selected = vm.soloMias,
+                        onClick = { vm.soloMias = !vm.soloMias },
+                        label = { Text("Mis mesas ($mias)", fontSize = 15.sp) },
+                    )
+                    if (vm.soloMias) Text("  Se ocultan las mesas de otros camareros", fontSize = 13.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             if (pestanas.size > 1) {
                 TabRow(selectedTabIndex = pestana, modifier = Modifier.padding(top = 8.dp)) {
                     pestanas.forEachIndexed { i, (nombre, mesas) ->
@@ -229,8 +262,11 @@ private fun PantallaMesas(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(pestanas[pestana].second, key = { it }) { mesa ->
-                    TarjetaMesa(mesa, vm.pedidoDe(mesa)) { vm.abrirMesa(mesa) }
+                // Con «Mis mesas» se ven las libres (para abrir una nueva) y las propias; las de otros se ocultan.
+                val visibles = pestanas[pestana].second.filter { m -> !vm.soloMias || vm.pedidoDe(m)?.let(vm::esMia) != false }
+                items(visibles, key = { it }) { mesa ->
+                    val pedido = vm.pedidoDe(mesa)
+                    TarjetaMesa(mesa, pedido, mia = pedido != null && vm.esMia(pedido)) { vm.abrirMesa(mesa) }
                 }
             }
         }
@@ -275,7 +311,7 @@ private fun Leyenda(ocupadas: Int, total: Int) {
 }
 
 @Composable
-private fun TarjetaMesa(mesa: String, pedido: Pedido?, alPulsar: () -> Unit) {
+private fun TarjetaMesa(mesa: String, pedido: Pedido?, mia: Boolean, alPulsar: () -> Unit) {
     val listo = pedido?.estado == "listo"
     val (fondo, texto) = when {
         pedido == null -> Color.White to FondoOscuro
@@ -289,8 +325,13 @@ private fun TarjetaMesa(mesa: String, pedido: Pedido?, alPulsar: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = if (pedido == null) 1.dp else 4.dp),
         modifier = Modifier.height(132.dp),
     ) {
+        Box {
+        // El camarero que cogió la comanda: su inicial y su color.
+        if (pedido?.camareroNombre != null) {
+            InsigniaCamarero(pedido.camareroId, pedido.camareroNombre, tamano = 30.dp, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+        }
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()) {
-            Text("Mesa", fontSize = 14.sp, color = texto.copy(alpha = 0.7f))
+            Text(if (mia) "Mesa · tuya" else "Mesa", fontSize = 14.sp, color = texto.copy(alpha = 0.7f))
             Text(mesa, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 36.sp, maxLines = 1)
             if (pedido == null) {
                 Text("Libre", fontSize = 14.sp, color = texto.copy(alpha = 0.5f))
@@ -310,6 +351,7 @@ private fun TarjetaMesa(mesa: String, pedido: Pedido?, alPulsar: () -> Unit) {
                 )
             }
         }
+        }
     }
 }
 
@@ -323,6 +365,7 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avis
     var menu by remember { mutableStateOf(false) }
     var confirmar by remember { mutableStateOf<String?>(null) }
     var cambiarMesa by remember { mutableStateOf(false) }
+    var pasarA by remember { mutableStateOf(false) }
 
     fun volver() {
         if (vm.nuevas.isNotEmpty()) salirSinEnviar = true else vm.cerrarMesa()
@@ -344,7 +387,10 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avis
                     Column {
                         Text("Mesa $mesa", fontWeight = FontWeight.Bold)
                         Text(
-                            pedido?.let { "Pedido nº ${it.numeroDia ?: it.id} · ${textoEstado(it.estado)}" + if (it.pagado) " · Pagada" else "" }
+                            pedido?.let {
+                                "Pedido nº ${it.numeroDia ?: it.id} · ${textoEstado(it.estado)}" + (if (it.pagado) " · Pagada" else "") +
+                                    (it.camareroNombre?.let { c -> " · $c" } ?: "")
+                            }
                                 ?: "Mesa libre: nueva comanda",
                             fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.7f),
@@ -360,6 +406,12 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avis
                                 DropdownMenuItem(text = { Text("Cobrar en efectivo") }, onClick = { menu = false; confirmar = "cobrar" })
                             }
                             DropdownMenuItem(text = { Text("Cambiar de mesa") }, onClick = { menu = false; cambiarMesa = true })
+                            if (vm.camarero != null && !vm.esMia(pedido)) {
+                                DropdownMenuItem(text = { Text("Coger esta comanda") }, onClick = { menu = false; vm.cogerComanda(pedido) })
+                            }
+                            if (vm.camareros.isNotEmpty()) {
+                                DropdownMenuItem(text = { Text("Pasar a otro camarero") }, onClick = { menu = false; pasarA = true })
+                            }
                         }
                     }
                 },
@@ -428,6 +480,15 @@ private fun PantallaComanda(vm: CamareroVM, ajustes: Ajustes, mesa: String, avis
             textoSi = "Liberar",
             alConfirmar = { confirmar = null; vm.liberarMesa(pedido) },
             alCancelar = { confirmar = null },
+        )
+    }
+    if (pasarA && pedido != null) {
+        DialogoCamarero(
+            titulo = "Comanda de la mesa $mesa para…",
+            camareros = vm.camareros,
+            actual = pedido.camareroId,
+            alElegir = { c -> pasarA = false; vm.pasarComanda(pedido, c) },
+            alCancelar = { pasarA = false },
         )
     }
     if (cambiarMesa && pedido != null) {

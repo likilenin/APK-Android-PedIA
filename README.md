@@ -23,11 +23,16 @@ Kotlin + Jetpack Compose. Android 8.0 o superior.
   bienvenida + PIN.
 
 **Camarero**
+- Al entrar, **«¿Quién eres?»**: se elige el nombre de la lista de camareros de PedIA (*Ajustes > Personal*).
+  Se cambia tocando el nombre arriba o en el menú ⋮. Sin lista en PedIA, se usa el nombre fijo de Ajustes.
+- Cada comanda nueva lleva el camarero (PedIA lo pone en el ticket) y su inicial y color salen en la mesa.
+  El filtro **«Mis mesas»** oculta las de otros. Cualquiera puede tocar la comanda de otro: **«Coger esta
+  comanda»** o **«Pasar a otro camarero»** en el menú de la mesa.
 - Cuadrícula de mesas (el número de mesas sale de *Ajustes > Datos del local* de PedIA) que se
   refresca sola cada 4 s: libre, ocupada (importe, productos, minutos) o lista (verde).
 - Al tocar una mesa: carta rápida con buscador. **Un toque añade 1**, pulsación larga abre
   opciones, nota y cantidad. Botón grande **ENVIAR A COCINA**.
-- Si la mesa está libre crea su pedido en PedIA (con `Camarero: <nombre>` en la nota); si ya
+- Si la mesa está libre crea su pedido en PedIA (con el camarero elegido); si ya
   tiene uno abierto, le añade los productos.
 - Opciones de la mesa: imprimir cuenta (en la impresora de PedIA), cobrar en efectivo, cambiar de
   mesa, liberar mesa, quitar productos ya enviados.

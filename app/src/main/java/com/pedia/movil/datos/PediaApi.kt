@@ -5,9 +5,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -175,6 +177,27 @@ class PediaApi(private val urlBase: String) {
         if (e.codigoHttp == 404) null else throw e
     }
 
+    /**
+     * Camareros dados de alta en PedIA. Lista vacía si PedIA no tiene ninguno o aún no tiene esta función
+     * (entonces la app sigue con el nombre fijo de Ajustes).
+     */
+    suspend fun camareros(): List<Camarero> = try {
+        json.parseToJsonElement(peticion("GET", "/api/camareros")).jsonObject["camareros"]
+            ?.let { json.decodeFromJsonElement<List<Camarero>>(it) }
+            .orEmpty()
+            .filter { it.activo != 0 }
+    } catch (e: ErrorPedia) {
+        if (e.codigoHttp == 404) emptyList() else throw e
+    }
+
+    /** Pone (o, con null, quita) el camarero de una comanda. */
+    suspend fun cambiarCamarero(pedidoId: Long, camareroId: Long?): Pedido =
+        json.decodeFromString(
+            peticion("PATCH", "/api/pedidos/$pedidoId/camarero", buildJsonObject {
+                if (camareroId != null) put("camarero_id", camareroId) else put("camarero_id", JsonNull)
+            })
+        )
+
     /** Pedidos de mesa abiertos (los mismos que PedIA marca como mesa ocupada). */
     suspend fun pedidosDeMesaActivos(): List<Pedido> =
         json.decodeFromString<List<Pedido>>(
@@ -204,6 +227,7 @@ class PediaApi(private val urlBase: String) {
         origen: String,
         pagoPrevisto: String? = null,
         retenerCocina: Boolean = false,
+        camareroId: Long? = null,
     ): Pedido {
         val cuerpo = buildJsonObject {
             put("tipo", tipo)
@@ -211,6 +235,7 @@ class PediaApi(private val urlBase: String) {
             if (pagoPrevisto != null) put("pago_previsto", pagoPrevisto)
             if (retenerCocina) put("retener_cocina", true)
             if (mesa != null) put("mesa_numero", mesa)
+            if (camareroId != null) put("camarero_id", camareroId)
             if (!notas.isNullOrBlank()) put("notas", notas)
             putJsonArray("items") { lineas.forEach { add(lineaJson(it)) } }
         }

@@ -82,12 +82,27 @@ const config = [
   { clave: 'iva_porcentaje', valor: '10', cifrado: false },
 ];
 
+// Camareros del local (Ajustes > Personal en PedIA). SIN_CAMAREROS=1 simula una PedIA sin lista (o sin esa función).
+const camareros = process.env.SIN_CAMAREROS ? [] : [
+  { id: 1, nombre: 'Ana', activo: 1 },
+  { id: 2, nombre: 'Luis', activo: 1 },
+  { id: 3, nombre: 'Marta', activo: 1 },
+];
+const nombreCamarero = (id) => (camareros.find((x) => x.id === id) || {}).nombre || null;
+const camareroValido = (valor) => {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const c = camareros.find((x) => x.id === Number(valor));
+  if (!c) throw Object.assign(new Error('Ese camarero no existe'), { status: 404 });
+  return c.id;
+};
 let pedidos = [];
 let siguientePedido = 1;
 let siguienteItem = 1;
 const ahoraUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const completar = (p) => {
   p.total = p.items.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0);
+  p.camarero_id = p.camarero_id ?? null;
+  p.camarero_nombre = nombreCamarero(p.camarero_id);
   return p;
 };
 const linea = (it) => {
@@ -114,7 +129,7 @@ const linea = (it) => {
 // Un pedido de ejemplo ya abierto en la mesa 3, hace 25 minutos.
 pedidos.push(completar({
   id: siguientePedido, numero_dia: siguientePedido++, tipo: 'mesa', mesa_numero: '3', estado: 'en_preparacion', estado_pago: 'pendiente',
-  notas: 'Camarero: Ana', created_at: new Date(Date.now() - 25 * 60000).toISOString().slice(0, 19).replace('T', ' '),
+  camarero_id: camareros.length ? 1 : null, notas: camareros.length ? null : 'Camarero: Ana', created_at: new Date(Date.now() - 25 * 60000).toISOString().slice(0, 19).replace('T', ' '),
   items: [linea({ producto_id: 1, cantidad: 2 }), linea({ producto_id: 7, cantidad: 2 })],
 }));
 
@@ -191,6 +206,11 @@ const servidor = http.createServer((req, res) => {
         return responder(res, 200, canal ? productos.filter((p) => p[`canal_${canal}`] !== 0) : productos);
       }
       if (ruta === '/api/config') return responder(res, 200, config);
+      if (ruta === '/api/camareros' && req.method === 'GET') {
+        if (process.env.SIN_CAMAREROS_404) return responder(res, 404, { error: 'ruta no simulada' });
+        if (process.env.CAMAREROS_ERROR) return responder(res, 500, { error: 'fallo simulado' });
+        return responder(res, 200, { camareros: camareros.filter((x) => x.activo) });
+      }
       if (ruta === '/api/pedidos' && req.method === 'GET') {
         const estados = (url.searchParams.get('estados') || '').split(',').filter(Boolean);
         return responder(res, 200, pedidos.filter((p) => !estados.length || estados.includes(p.estado)));
@@ -201,6 +221,7 @@ const servidor = http.createServer((req, res) => {
           id: siguientePedido, numero_dia: siguientePedido++, tipo: body.tipo, mesa_numero: body.mesa_numero || null,
           estado: 'pendiente', estado_pago: 'pendiente', notas: body.notas || null, created_at: ahoraUtc(), items: body.items.map(linea),
           origen: body.origen || 'tpv', pago_previsto: body.pago_previsto || null, cocina_retenida: body.retener_cocina ? 1 : 0,
+          camarero_id: camareroValido(body.camarero_id),
         });
         pedidos.push(p);
         log('>>> PEDIDO NUEVO', JSON.stringify(p));
@@ -238,6 +259,11 @@ const servidor = http.createServer((req, res) => {
           if (req.method === 'DELETE') p.items = p.items.filter((i) => i !== item);
           else if (body.cantidad != null) item.cantidad = Number(body.cantidad);
           else { item.notas = (body.notas || '').trim() || null; log('>>> NOTA CAMBIADA', p.id, item.id, item.notas); }
+          return responder(res, 200, completar(p));
+        }
+        if (resto === '/camarero' && req.method === 'PATCH') {
+          p.camarero_id = camareroValido(body.camarero_id);
+          log('>>> CAMARERO DE LA COMANDA', p.id, '->', nombreCamarero(p.camarero_id));
           return responder(res, 200, completar(p));
         }
         if (resto === '/marcar-pagado') { p.estado_pago = 'pagado'; return responder(res, 200, p); }
